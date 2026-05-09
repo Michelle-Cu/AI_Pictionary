@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projector — AI Pictionary</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="projector-page">
+
+  <!-- Mode A: Scoreboard -->
+  <div id="mode-scoreboard" class="projector-scoreboard">
+    <div class="proj-title" id="proj-title">AI 你畫我猜</div>
+
+    <div class="teams-container">
+      <div class="team-card">
+        <h2>Team A</h2>
+        <div class="dots-row">
+          <span class="dot" id="dot-A1"></span>
+          <span class="dot" id="dot-A2"></span>
+          <span class="dot" id="dot-A3"></span>
+          <span class="dot" id="dot-A4"></span>
+        </div>
+        <div class="team-avg" id="avg-A">— %</div>
+      </div>
+
+      <div class="team-card">
+        <h2>Team B</h2>
+        <div class="dots-row">
+          <span class="dot" id="dot-B1"></span>
+          <span class="dot" id="dot-B2"></span>
+          <span class="dot" id="dot-B3"></span>
+          <span class="dot" id="dot-B4"></span>
+        </div>
+        <div class="team-avg" id="avg-B">— %</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mode B: Single submission -->
+  <div id="mode-single" class="projector-single" style="display:none">
+    <div class="single-header" id="single-header">Team — Group —</div>
+    <div class="single-content">
+      <img id="single-img" src="" alt="Submission">
+      <div class="single-score">Score: <span id="single-score-val">—</span></div>
+    </div>
+  </div>
+
+  <script>
+    let submitted = {};
+    let averages = {};
+    let showAvg = false;
+
+    // ── Render helpers ─────────────────────────────────────────────────────────
+
+    function renderDots() {
+      ["A", "B"].forEach(team => {
+        [1, 2, 3, 4].forEach(g => {
+          const dot = document.getElementById(`dot-${team}${g}`);
+          if (dot) dot.className = "dot" + (submitted[`${team}${g}`] ? " filled" : "");
+        });
+      });
+    }
+
+    function renderAverages() {
+      ["A", "B"].forEach(team => {
+        const el = document.getElementById(`avg-${team}`);
+        if (!el) return;
+        if (showAvg && averages[team] !== undefined) {
+          el.textContent = averages[team] + "%";
+          el.classList.add("revealed");
+        } else {
+          el.textContent = "— %";
+          el.classList.remove("revealed");
+        }
+      });
+    }
+
+    function toScoreboard() {
+      document.getElementById("mode-scoreboard").style.display = "flex";
+      document.getElementById("mode-single").style.display = "none";
+    }
+
+    function toSingle(team, group_number, image_url, score) {
+      document.getElementById("mode-scoreboard").style.display = "none";
+      document.getElementById("mode-single").style.display = "flex";
+      document.getElementById("single-header").textContent = `Team ${team} — Group ${group_number}`;
+      if (image_url) {
+        document.getElementById("single-img").src = image_url + "?t=" + Date.now();
+      }
+      document.getElementById("single-score-val").textContent =
+        score !== null && score !== undefined ? Math.round(score) + "%" : "—";
+    }
+
+    // ── Apply full state (from init event) ────────────────────────────────────
+
+    function applyState(state) {
+      submitted = state.submitted || {};
+      showAvg = state.projector_show_average || false;
+      averages = state.averages || {};
+
+      if (state.current_question_id) {
+        document.getElementById("proj-title").textContent = "Question: " + state.current_question_id;
+      } else {
+        document.getElementById("proj-title").textContent = "AI 你畫我猜";
+      }
+
+      renderDots();
+      renderAverages();
+
+      if (state.projector_mode === "single" && state.projector_target) {
+        const t = state.projector_target;
+        toSingle(t.team, t.group_number, state.projector_image_url, state.projector_score);
+      } else {
+        toScoreboard();
+      }
+    }
+
+    // ── SSE ────────────────────────────────────────────────────────────────────
+
+    function connectSSE() {
+      const es = new EventSource("/events");
+
+      es.addEventListener("init", (e) => {
+        applyState(JSON.parse(e.data));
+      });
+
+      es.addEventListener("submission", (e) => {
+        const d = JSON.parse(e.data);
+        submitted[`${d.team}${d.group_number}`] = true;
+        renderDots();
+      });
+
+      es.addEventListener("question_changed", (e) => {
+        const d = JSON.parse(e.data);
+        submitted = {};
+        averages = {};
+        showAvg = false;
+        document.getElementById("proj-title").textContent = "Question: " + d.question_id;
+        renderDots();
+        renderAverages();
+        toScoreboard();
+      });
+
+      es.addEventListener("show_average", (e) => {
+        const d = JSON.parse(e.data);
+        showAvg = d.show;
+        averages = d.averages || {};
+        renderAverages();
+      });
+
+      es.addEventListener("show_pics", (e) => {
+        const d = JSON.parse(e.data);
+        toSingle(d.team, d.group_number, d.image_url, d.score);
+      });
+
+      es.addEventListener("show_scoreboard", () => {
+        toScoreboard();
+      });
+    }
+
+    connectSSE();
+  </script>
+</body>
+</html>

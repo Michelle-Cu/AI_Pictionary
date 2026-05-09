@@ -1,0 +1,6 @@
+.env
+game.db
+data/
+__pycache__/
+*.pyc
+.venv/

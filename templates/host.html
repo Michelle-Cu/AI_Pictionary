@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Host Console — AI Pictionary</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="host-page">
+
+  <h1>🎮 Host Console</h1>
+
+  <div class="host-grid">
+    <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+    <aside>
+      <!-- Upload -->
+      <div class="sidebar-card">
+        <h2>Upload Question</h2>
+        <form class="upload-form" id="upload-form" onsubmit="doUpload(event)">
+          <input type="text" id="qid-input" placeholder="Question ID (e.g. Q1)" required>
+          <input type="file" id="qfile-input" accept="image/*" required>
+          <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+        </form>
+        <div id="upload-status" style="font-size:.82rem;color:#059669;display:none">✓ Uploaded!</div>
+      </div>
+
+      <!-- Question list -->
+      <div class="sidebar-card" style="margin-top:1rem">
+        <h2>Questions</h2>
+        <div class="question-list" id="question-list">
+          <div style="color:#94a3b8;font-size:.85rem">No questions uploaded yet.</div>
+        </div>
+      </div>
+
+      <!-- Group URLs -->
+      <div class="sidebar-card" style="margin-top:1rem">
+        <h2>Group URLs</h2>
+        <div style="font-size:.78rem;color:#64748b;margin-bottom:.5rem">
+          Replace <code>HOST</code> with this laptop's IP (e.g. 192.168.1.42).
+        </div>
+        <table class="url-table">
+          <thead><tr><th>Group</th><th>URL</th></tr></thead>
+          <tbody id="url-tbody"></tbody>
+        </table>
+      </div>
+    </aside>
+
+    <!-- ── Main ──────────────────────────────────────────────────────────────── -->
+    <div class="main-area">
+      <!-- Controls -->
+      <div class="controls-bar">
+        <div class="current-q" id="current-q-label">Active question: <strong id="current-q-val">none</strong></div>
+        <button class="btn btn-primary" id="show-avg-btn" onclick="toggleAverage()">Show Average</button>
+        <button class="btn btn-secondary" onclick="backToScoreboard()">↩ Scoreboard</button>
+        <a href="/projector" target="_blank" class="btn btn-outline btn-sm">Open Projector ↗</a>
+        <button class="btn btn-danger btn-sm" onclick="clearSubmissions()">🗑 Clear Submissions</button>
+      </div>
+
+      <!-- Stats grid -->
+      <div class="stats-grid">
+        <h2>Submissions</h2>
+        <div id="stats-container">
+          <div style="color:#94a3b8;font-size:.9rem;padding:.5rem 0">Load a question to see stats.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Group tokens injected from server
+    const GROUP_TOKENS = {
+      {% for (team, grp), token in group_tokens.items() %}
+      "{{ team }}{{ grp }}": "{{ token }}",
+      {% endfor %}
+    };
+    const TEAMS = {{ teams | tojson }};
+    const GROUPS = {{ groups | tojson }};
+
+    let activeQid = null;
+    let showingAverage = false;
+
+    // ── Build URL table ────────────────────────────────────────────────────────
+
+    function buildURLTable() {
+      const tbody = document.getElementById("url-tbody");
+      const origin = window.location.origin.replace(window.location.hostname, "HOST");
+      TEAMS.forEach(team => {
+        GROUPS.forEach(g => {
+          const token = GROUP_TOKENS[`${team}${g}`] || "";
+          const url = `${origin}/team/${team}/group/${g}?token=${token}`;
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td><strong>Team ${team} G${g}</strong></td><td><code>${url}</code></td>`;
+          tbody.appendChild(tr);
+        });
+      });
+    }
+
+    // ── Load questions ─────────────────────────────────────────────────────────
+
+    async function loadQuestions() {
+      const res = await fetch("/api/questions");
+      const questions = await res.json();
+      const gs = await (await fetch("/api/state")).json();
+      activeQid = gs.current_question_id || null;
+      showingAverage = gs.projector_show_average || false;
+      updateAvgButton();
+
+      const list = document.getElementById("question-list");
+      if (questions.length === 0) {
+        list.innerHTML = '<div style="color:#94a3b8;font-size:.85rem">No questions yet.</div>';
+        return;
+      }
+      list.innerHTML = "";
+      questions.forEach(q => {
+        const div = document.createElement("div");
+        div.className = "q-item" + (q.id === activeQid ? " active" : "");
+        div.id = `qi-${q.id}`;
+        div.innerHTML = `
+          <span>${q.id}</span>
+          <button class="btn btn-primary btn-sm" onclick="setQuestion('${q.id}')">Activate</button>
+        `;
+        list.appendChild(div);
+      });
+
+      if (activeQid) {
+        document.getElementById("current-q-val").textContent = activeQid;
+        loadStats();
+      }
+    }
+
+    // ── Set active question ────────────────────────────────────────────────────
+
+    async function setQuestion(qid) {
+      if (!confirm(`Switch to question ${qid}? This will reset all group pages.`)) return;
+      await fetch("/api/host/set-question", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question_id: qid }),
+      });
+      activeQid = qid;
+      showingAverage = false;
+      updateAvgButton();
+      document.getElementById("current-q-val").textContent = qid;
+      document.querySelectorAll(".q-item").forEach(el => el.classList.remove("active"));
+      const el = document.getElementById(`qi-${qid}`);
+      if (el) el.classList.add("active");
+      loadStats();
+    }
+
+    // ── Upload ─────────────────────────────────────────────────────────────────
+
+    async function doUpload(e) {
+      e.preventDefault();
+      const qid = document.getElementById("qid-input").value.trim();
+      const file = document.getElementById("qfile-input").files[0];
+      if (!qid || !file) return;
+
+      const fd = new FormData();
+      fd.append("question_id", qid);
+      fd.append("file", file);
+
+      const res = await fetch("/api/host/upload", { method: "POST", body: fd });
+      if (res.ok) {
+        document.getElementById("upload-status").style.display = "block";
+        setTimeout(() => document.getElementById("upload-status").style.display = "none", 2000);
+        document.getElementById("upload-form").reset();
+        loadQuestions();
+      } else {
+        const d = await res.json();
+        alert("Upload failed: " + (d.detail || "unknown error"));
+      }
+    }
+
+    // ── Show average toggle ────────────────────────────────────────────────────
+
+    function updateAvgButton() {
+      const btn = document.getElementById("show-avg-btn");
+      btn.textContent = showingAverage ? "Hide Average" : "Show Average";
+      btn.className = showingAverage ? "btn btn-danger" : "btn btn-primary";
+    }
+
+    async function toggleAverage() {
+      const newVal = !showingAverage;
+      const res = await fetch("/api/host/show-average", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ show: newVal }),
+      });
+      if (res.ok) {
+        showingAverage = newVal;
+        updateAvgButton();
+      }
+    }
+
+    // ── Back to scoreboard ─────────────────────────────────────────────────────
+
+    async function backToScoreboard() {
+      await fetch("/api/host/show-pics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    }
+
+    // ── Show pics for a group ─────────────────────────────────────────────────
+
+    async function showPics(team, group) {
+      await fetch("/api/host/show-pics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team, group_number: group }),
+      });
+    }
+
+    // ── Stats ──────────────────────────────────────────────────────────────────
+
+    async function loadStats() {
+      const res = await fetch("/api/host/stats");
+      const stats = await res.json();
+      renderStats(stats);
+    }
+
+    function renderStats(stats) {
+      const container = document.getElementById("stats-container");
+      if (!stats.length) {
+        container.innerHTML = '<div style="color:#94a3b8;font-size:.9rem">No submissions yet.</div>';
+        return;
+      }
+
+      let html = `<table class="stats-table">
+        <thead>
+          <tr>
+            <th>Question</th>
+            <th>Team A (${GROUPS.length} groups)</th>
+            <th>Team B (${GROUPS.length} groups)</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+      stats.forEach(q => {
+        const isActive = q.question_id === activeQid;
+        html += `<tr class="${isActive ? "active-row" : ""}">
+          <td>
+            <strong>${q.question_id}</strong><br>
+            <img src="${q.image_url}" style="width:60px;height:60px;object-fit:cover;border-radius:.35rem;margin-top:.3rem">
+          </td>`;
+
+        TEAMS.forEach(team => {
+          const td = q.teams[team];
+          html += `<td>
+            <div style="font-size:.8rem;color:#64748b;margin-bottom:.35rem">
+              Submitted: <strong>${td.count}/${GROUPS.length}</strong>
+              ${td.avg !== null ? ` · Avg: <strong>${td.avg}%</strong>` : ""}
+            </div>
+            <div class="group-score-grid">`;
+          GROUPS.forEach(g => {
+            const gs = td.groups[String(g)];
+            if (gs.submitted) {
+              html += `
+                <span class="gscore submitted"
+                  title="${gs.prompt || ''}"
+                  onclick="showPics('${team}', ${g})"
+                  style="cursor:pointer">
+                  G${g}: ${gs.score}%
+                </span>`;
+            } else {
+              html += `<span class="gscore">G${g}: --</span>`;
+            }
+          });
+          html += `</div></td>`;
+        });
+
+        html += `</tr>`;
+      });
+
+      html += `</tbody></table>`;
+      container.innerHTML = html;
+    }
+
+    // ── SSE (auto-refresh stats on new submissions) ────────────────────────────
+
+    function connectSSE() {
+      const es = new EventSource("/events");
+      es.addEventListener("submission", () => { if (activeQid) loadStats(); });
+      es.addEventListener("questions_updated", () => loadQuestions());
+    }
+
+    // ── Clear submissions ──────────────────────────────────────────────────────
+
+    async function clearSubmissions() {
+      if (!confirm("Clear ALL submissions? Questions and images stay. This cannot be undone.")) return;
+      const res = await fetch("/api/host/clear-submissions", { method: "POST" });
+      if (res.ok) {
+        showingAverage = false;
+        updateAvgButton();
+        loadStats();
+      }
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+
+    buildURLTable();
+    loadQuestions();
+    connectSSE();
+  </script>
+</body>
+</html>

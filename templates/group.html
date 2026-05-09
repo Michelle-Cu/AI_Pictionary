@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team {{ team }} · Group {{ group_number }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="group-page">
+
+  <header class="page-header">
+    <h1>Team {{ team }} — Group {{ group_number }}</h1>
+    <div class="question-badge" id="q-badge">Waiting…</div>
+  </header>
+
+  <main class="group-layout">
+    <!-- Reference Image -->
+    <section class="panel reference-panel">
+      <h2>Reference Image</h2>
+      <div class="img-frame">
+        <img id="ref-img" alt="Reference image">
+        <div class="placeholder" id="ref-ph">
+          ⏳ Waiting for host to start a question…
+        </div>
+      </div>
+    </section>
+
+    <!-- Work Area -->
+    <section class="panel work-panel">
+      <h2>Your Generated Image</h2>
+      <div class="img-frame">
+        <img id="gen-img" alt="Generated image">
+        <div class="placeholder" id="gen-ph">Click <strong>Generate</strong> to see your image here</div>
+        <div class="spinner" id="gen-spinner">
+          <div class="spin-icon"></div>
+          Generating with Gemini…
+        </div>
+      </div>
+
+      <div>
+        <h2>Your Prompt</h2>
+        <textarea id="prompt-input"
+          placeholder="Describe the image you want to recreate (subject + environment + style)…"
+          rows="4"></textarea>
+      </div>
+
+      <div class="btn-row" id="btn-row">
+        <button class="btn btn-secondary" id="generate-btn" onclick="doGenerate()">⚡ Generate</button>
+        <label class="btn btn-secondary" id="upload-btn">
+          📁 Upload Image
+          <input type="file" id="upload-input" accept="image/*" style="display:none" onchange="doUpload(this)">
+        </label>
+        <button class="btn btn-success" id="submit-btn" onclick="doSubmit()">✓ Submit</button>
+      </div>
+
+      <div class="submit-banner" id="submit-banner" style="display:none">
+        ✅ Submitted! Your score: <span class="score-big" id="score-val">--</span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const TEAM = "{{ team }}";
+    const GROUP = {{ group_number }};
+    const TOKEN = "{{ token }}";
+    let hasGeneratedImage = false;
+
+    // ── UI state helpers ───────────────────────────────────────────────────────
+
+    function showRef(qid) {
+      const img = document.getElementById("ref-img");
+      img.src = `/images/questions/${qid}.png?t=${Date.now()}`;
+      img.style.display = "block";
+      document.getElementById("ref-ph").style.display = "none";
+      document.getElementById("q-badge").textContent = `Question: ${qid}`;
+    }
+
+    function clearRef() {
+      document.getElementById("ref-img").style.display = "none";
+      document.getElementById("ref-ph").style.display = "flex";
+      document.getElementById("q-badge").textContent = "Waiting…";
+    }
+
+    function enableDrafting() {
+      document.getElementById("generate-btn").disabled = false;
+      document.getElementById("submit-btn").disabled = false;
+      document.getElementById("prompt-input").disabled = false;
+      document.getElementById("upload-btn").style.pointerEvents = "auto";
+      document.getElementById("upload-btn").style.opacity = "1";
+      document.getElementById("btn-row").style.display = "flex";
+      document.getElementById("submit-banner").style.display = "none";
+    }
+
+    function setGenerating() {
+      document.getElementById("generate-btn").disabled = true;
+      document.getElementById("submit-btn").disabled = true;
+      document.getElementById("upload-btn").style.pointerEvents = "none";
+      document.getElementById("upload-btn").style.opacity = "0.5";
+      document.getElementById("gen-spinner").style.display = "flex";
+      document.getElementById("gen-img").style.display = "none";
+      document.getElementById("gen-ph").style.display = "none";
+    }
+
+    function showGenImage(url) {
+      hasGeneratedImage = true;
+      const img = document.getElementById("gen-img");
+      img.src = url + "?t=" + Date.now();
+      img.style.display = "block";
+      document.getElementById("gen-spinner").style.display = "none";
+      document.getElementById("gen-ph").style.display = "none";
+    }
+
+    function showSubmitted(score, imgUrl, prompt) {
+      if (prompt) document.getElementById("prompt-input").value = prompt;
+      if (imgUrl) showGenImage(imgUrl);
+      document.getElementById("generate-btn").disabled = true;
+      document.getElementById("submit-btn").disabled = true;
+      document.getElementById("prompt-input").disabled = true;
+      document.getElementById("upload-btn").style.pointerEvents = "none";
+      document.getElementById("upload-btn").style.opacity = "0.5";
+      document.getElementById("btn-row").style.display = "none";
+      document.getElementById("score-val").textContent = Math.round(score) + "%";
+      document.getElementById("submit-banner").style.display = "block";
+    }
+
+    function resetForNewQuestion(qid) {
+      hasGeneratedImage = false;
+      document.getElementById("prompt-input").value = "";
+      document.getElementById("gen-img").style.display = "none";
+      document.getElementById("gen-ph").style.display = "flex";
+      document.getElementById("gen-spinner").style.display = "none";
+      document.getElementById("submit-banner").style.display = "none";
+      showRef(qid);
+      enableDrafting();
+    }
+
+    // ── Load page state ────────────────────────────────────────────────────────
+
+    async function loadState() {
+      const res = await fetch(`/api/group-state/${TEAM}/${GROUP}`);
+      const data = await res.json();
+      const gs = data.game_state;
+
+      if (!gs || !gs.current_question_id) {
+        clearRef();
+        document.getElementById("btn-row").style.display = "none";
+        document.getElementById("prompt-input").disabled = true;
+        return;
+      }
+
+      showRef(gs.current_question_id);
+
+      if (data.submission) {
+        showSubmitted(data.submission.score, data.submission.image_url, data.submission.prompt);
+      } else {
+        enableDrafting();
+      }
+    }
+
+    // ── Actions ────────────────────────────────────────────────────────────────
+
+    async function doGenerate() {
+      const prompt = document.getElementById("prompt-input").value.trim();
+      if (!prompt) { alert("Please enter a prompt first."); return; }
+      setGenerating();
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ team: TEAM, group_number: GROUP, prompt, token: TOKEN }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Generation failed");
+        showGenImage(data.image_url);
+        enableDrafting();
+      } catch (err) {
+        alert("Error: " + err.message);
+        document.getElementById("gen-spinner").style.display = "none";
+        document.getElementById("gen-ph").style.display = "flex";
+        enableDrafting();
+      }
+    }
+
+    async function doUpload(input) {
+      const file = input.files[0];
+      if (!file) return;
+      input.value = "";
+      setGenerating();
+      try {
+        const form = new FormData();
+        form.append("team", TEAM);
+        form.append("group_number", GROUP);
+        form.append("token", TOKEN);
+        form.append("file", file);
+        const res = await fetch("/api/upload-image", { method: "POST", body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Upload failed");
+        showGenImage(data.image_url);
+        enableDrafting();
+      } catch (err) {
+        alert("Error: " + err.message);
+        document.getElementById("gen-spinner").style.display = "none";
+        document.getElementById("gen-ph").style.display = "flex";
+        enableDrafting();
+      }
+    }
+
+    async function doSubmit() {
+      if (!hasGeneratedImage) {
+        alert("Please generate an image first.");
+        return;
+      }
+      if (!confirm("Submit this image? You can only submit once per question.")) return;
+
+      const prompt = document.getElementById("prompt-input").value.trim();
+      document.getElementById("submit-btn").disabled = true;
+      try {
+        const res = await fetch("/api/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ team: TEAM, group_number: GROUP, prompt, token: TOKEN }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Submit failed");
+        showSubmitted(data.score, null, prompt);
+      } catch (err) {
+        alert("Error: " + err.message);
+        document.getElementById("submit-btn").disabled = false;
+      }
+    }
+
+    // ── SSE ────────────────────────────────────────────────────────────────────
+
+    function connectSSE() {
+      const es = new EventSource("/events");
+      es.addEventListener("question_changed", (e) => {
+        const data = JSON.parse(e.data);
+        resetForNewQuestion(data.question_id);
+      });
+      es.onerror = () => {
+        // Reconnect handled automatically by browser EventSource
+      };
+    }
+
+    loadState();
+    connectSSE();
+  </script>
+</body>
+</html>
