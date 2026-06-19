@@ -90,7 +90,7 @@ def _build_full_state() -> dict:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
-    clip_score.load_clip_model()
+    clip_score.load_models()
     Path("data/questions").mkdir(parents=True, exist_ok=True)
     Path("data/submissions").mkdir(parents=True, exist_ok=True)
     yield
