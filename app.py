@@ -20,7 +20,7 @@ import db
 
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 TEAMS = ["A", "B"]
 GROUPS = list(range(1, 5))
 
@@ -229,8 +229,8 @@ async def api_generate(req: GenerateReq):
     if db.get_submission(qid, team, req.group_number):
         raise HTTPException(400, "Already submitted for this question.")
 
-    if not GEMINI_API_KEY:
-        raise HTTPException(500, "GEMINI_API_KEY is not set on the server.")
+    if not OPENROUTER_API_KEY:
+        raise HTTPException(500, "OPENROUTER_API_KEY is not set on the server.")
 
     img_bytes = await _gemini_generate(req.prompt)
 
@@ -431,31 +431,112 @@ def _check_group(team: str, group_number: int, token: str):
         raise HTTPException(403, "Invalid token.")
 
 
-async def _gemini_generate(prompt: str) -> bytes:
-    try:
-        from google import genai
-        from google.genai import types
+# async def _gemini_generate(prompt: str) -> bytes:
+#     try:
+#         import base64
+#         from openai import AsyncOpenAI
 
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        response = client.models.generate_content(
-            model="gemini-2.0-flash-preview-image-generation",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"]
-            ),
-        )
-        for part in response.candidates[0].content.parts:
-            if getattr(part, "inline_data", None) is not None:
-                data = part.inline_data.data
-                if isinstance(data, str):
-                    import base64
-                    data = base64.b64decode(data)
-                return data
-        raise ValueError("Gemini returned no image part.")
-    except HTTPException:
-        raise
+#         client = AsyncOpenAI(
+#             api_key=OPENROUTER_API_KEY,
+#             base_url="https://openrouter.ai/api/v1",
+#         )
+#         response = await client.chat.completions.create(
+#             model="google/gemini-2.5-flash-image",
+#             messages=[{"role": "user", "content": prompt}],
+#         )
+#         print(f"[DEBUG] Full response: {response.model_dump()}")
+#         import httpx
+#         for choice in response.choices:
+#             content = choice.message.content
+#             print(f"[DEBUG] OpenRouter response content type: {type(content)}")
+#             print(f"[DEBUG] OpenRouter response content: {repr(content)[:500]}")
+#             if not content:
+#                 continue
+#             if isinstance(content, str) and content.startswith("data:image"):
+#                 header, b64 = content.split(",", 1)
+#                 return base64.b64decode(b64)
+#             if isinstance(content, str) and content.startswith("http"):
+#                 async with httpx.AsyncClient() as hclient:
+#                     r = await hclient.get(content)
+#                     r.raise_for_status()
+#                     return r.content
+#             if isinstance(content, list):
+#                 for part in content:
+#                     if isinstance(part, dict) and part.get("type") == "image_url":
+#                         url = part["image_url"]["url"]
+#                         if url.startswith("data:image"):
+#                             header, b64 = url.split(",", 1)
+#                             return base64.b64decode(b64)
+#                         if url.startswith("http"):
+#                             async with httpx.AsyncClient() as hclient:
+#                                 r = await hclient.get(url)
+#                                 r.raise_for_status()
+#                                 return r.content
+#         raise ValueError("No image data found in OpenRouter response.")
+#     except HTTPException:
+#         raise
+#     except Exception as exc:
+#         raise HTTPException(500, f"OpenRouter error: {exc}") from exc
+
+async def _gemini_generate(prompt: str) -> bytes:
+    import base64
+    import httpx
+    
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "model": "google/gemini-2.5-flash-image",
+        "messages": [{"role": "user", "content": prompt}],
+        # 1. Explicitly request image generation
+        "modalities": ["image", "text"] 
+    }
+    
+    try:
+        # Make a direct request to avoid OpenAI SDK schema stripping
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+        # 2. Extract the OpenRouter-specific `images` array
+        for choice in data.get("choices", []):
+            message = choice.get("message", {})
+            images = message.get("images", [])
+            
+            for img in images:
+                # APIs sometimes camelCase or snake_case this property
+                url_obj = img.get("image_url") or img.get("imageUrl")
+                if not url_obj:
+                    continue
+                
+                url = url_obj.get("url", "")
+                
+                # Parse Base64
+                if url.startswith("data:image"):
+                    header, b64 = url.split(",", 1)
+                    return base64.b64decode(b64)
+                    
+                # Parse standard HTTP URL 
+                elif url.startswith("http"):
+                    async with httpx.AsyncClient() as hclient:
+                        r = await hclient.get(url)
+                        r.raise_for_status()
+                        return r.content
+                        
+        raise ValueError("No image data found in OpenRouter response.")
+        
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(500, f"OpenRouter API error: {exc.response.text}") from exc
     except Exception as exc:
-        raise HTTPException(500, f"Gemini error: {exc}") from exc
+        raise HTTPException(500, f"Error generating image: {exc}") from exc
 
 
 if __name__ == "__main__":
