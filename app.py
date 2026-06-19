@@ -167,7 +167,7 @@ async def host_page(request: Request):
 async def api_group_state(team: str, group_number: int):
     team = team.upper()
     gs = db.get_game_state()
-    result: dict = {"game_state": gs, "question": None, "submission": None}
+    result: dict = {"game_state": gs, "question": None, "submission": None, "drafts": []}
     if gs and gs.get("current_question_id"):
         qid = gs["current_question_id"]
         result["question"] = db.get_question(qid)
@@ -176,6 +176,13 @@ async def api_group_state(team: str, group_number: int):
             sub = dict(sub)
             sub["image_url"] = _path_to_url(sub["image_path"])
         result["submission"] = sub
+        for v in range(1, 4):
+            p = Path(f"data/submissions/{qid}/{team}_{group_number}_draft_v{v}.png")
+            if p.exists():
+                result["drafts"].append({
+                    "version": v,
+                    "image_url": f"/images/submissions/{qid}/{team}_{group_number}_draft_v{v}.png",
+                })
     return result
 
 
@@ -204,16 +211,25 @@ async def api_upload_image(
     if db.get_submission(qid, team, group_number):
         raise HTTPException(400, "Already submitted for this question.")
 
-    out = Path(f"data/submissions/{qid}/{team}_{group_number}.png")
-    out.parent.mkdir(parents=True, exist_ok=True)
+    draft_dir = Path(f"data/submissions/{qid}")
+    draft_dir.mkdir(parents=True, exist_ok=True)
+    existing = list(draft_dir.glob(f"{team}_{group_number}_draft_v*.png"))
+    if len(existing) >= 3:
+        raise HTTPException(400, "Maximum 3 uploads reached for this question.")
+    version = len(existing) + 1
 
+    out = draft_dir / f"{team}_{group_number}_draft_v{version}.png"
     raw = await file.read()
     img = Image.open(io.BytesIO(raw)).convert("RGB")
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     out.write_bytes(buf.getvalue())
 
-    return {"image_url": f"/images/submissions/{qid}/{team}_{group_number}.png"}
+    return {
+        "image_url": f"/images/submissions/{qid}/{team}_{group_number}_draft_v{version}.png",
+        "version": version,
+        "total_drafts": version,
+    }
 
 
 @app.post("/api/generate")
@@ -229,21 +245,29 @@ async def api_generate(req: GenerateReq):
     if db.get_submission(qid, team, req.group_number):
         raise HTTPException(400, "Already submitted for this question.")
 
+    draft_dir = Path(f"data/submissions/{qid}")
+    draft_dir.mkdir(parents=True, exist_ok=True)
+    existing = list(draft_dir.glob(f"{team}_{req.group_number}_draft_v*.png"))
+    if len(existing) >= 3:
+        raise HTTPException(400, "Maximum 3 generations reached for this question.")
+    version = len(existing) + 1
+
     if not OPENROUTER_API_KEY:
         raise HTTPException(500, "OPENROUTER_API_KEY is not set on the server.")
 
     img_bytes = await _gemini_generate(req.prompt)
 
-    out = Path(f"data/submissions/{qid}/{team}_{req.group_number}.png")
-    out.parent.mkdir(parents=True, exist_ok=True)
-
-    # Normalize to PNG via PIL
+    out = draft_dir / f"{team}_{req.group_number}_draft_v{version}.png"
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     out.write_bytes(buf.getvalue())
 
-    return {"image_url": f"/images/submissions/{qid}/{team}_{req.group_number}.png"}
+    return {
+        "image_url": f"/images/submissions/{qid}/{team}_{req.group_number}_draft_v{version}.png",
+        "version": version,
+        "total_drafts": version,
+    }
 
 
 class SubmitReq(BaseModel):
@@ -251,6 +275,7 @@ class SubmitReq(BaseModel):
     group_number: int
     prompt: str
     token: str = ""
+    version: int = 1
 
 
 @app.post("/api/submit")
@@ -266,9 +291,9 @@ async def api_submit(req: SubmitReq):
     if db.get_submission(qid, team, req.group_number):
         raise HTTPException(400, "Already submitted — one submission per question.")
 
-    draft = Path(f"data/submissions/{qid}/{team}_{req.group_number}.png")
+    draft = Path(f"data/submissions/{qid}/{team}_{req.group_number}_draft_v{req.version}.png")
     if not draft.exists():
-        raise HTTPException(400, "No generated image found. Please click Generate first.")
+        raise HTTPException(400, f"Draft v{req.version} not found. Please generate an image first.")
 
     question = db.get_question(qid)
     if not question:
@@ -405,11 +430,17 @@ async def api_host_stats():
             groups: dict[str, dict] = {}
             for g in GROUPS:
                 sub = sub_map.get((q["id"], team, g))
+                draft_urls = [
+                    f"/images/submissions/{q['id']}/{team}_{g}_draft_v{v}.png"
+                    for v in range(1, 4)
+                    if Path(f"data/submissions/{q['id']}/{team}_{g}_draft_v{v}.png").exists()
+                ]
                 groups[str(g)] = {
                     "submitted": sub is not None,
                     "score": round(sub["score"]) if sub else None,
                     "prompt": sub["prompt"] if sub else None,
                     "image_url": _path_to_url(sub["image_path"]) if sub else None,
+                    "draft_urls": draft_urls,
                 }
             count = sum(1 for g in GROUPS if sub_map.get((q["id"], team, g)))
             avg = None
@@ -521,7 +552,7 @@ async def _gemini_generate(prompt: str) -> bytes:
                 
                 # Parse Base64
                 if url.startswith("data:image"):
-                    header, b64 = url.split(",", 1)
+                    _, b64 = url.split(",", 1)
                     return base64.b64decode(b64)
                     
                 # Parse standard HTTP URL 

@@ -5,8 +5,42 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Host Console — AI Pictionary</title>
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .gscore-block { display: flex; flex-direction: column; gap: .25rem; }
+    .draft-thumbs { display: flex; gap: .2rem; flex-wrap: wrap; }
+    .draft-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: .4rem; border: 2px solid #e2e8f0; cursor: zoom-in; transition: border-color .15s, transform .15s; }
+    .draft-thumb:hover { border-color: #4f46e5; transform: scale(1.08); }
+
+    /* Lightbox */
+    #lightbox {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,.75); align-items: center; justify-content: center;
+    }
+    #lightbox.open { display: flex; }
+    #lightbox-inner {
+      background: #fff; border-radius: 1rem; padding: 1rem;
+      max-width: 520px; width: 90%; display: flex; flex-direction: column; gap: .75rem;
+      position: relative;
+    }
+    #lightbox-img { width: 100%; border-radius: .6rem; object-fit: contain; max-height: 70vh; }
+    #lightbox-label { font-size: .85rem; color: #64748b; text-align: center; }
+    #lightbox-close {
+      position: absolute; top: .6rem; right: .75rem;
+      background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748b;
+    }
+    #lightbox-close:hover { color: #1e293b; }
+  </style>
 </head>
 <body class="host-page">
+
+  <!-- Lightbox -->
+  <div id="lightbox" onclick="closeLightbox(event)">
+    <div id="lightbox-inner">
+      <button id="lightbox-close" onclick="closeLightbox()">✕</button>
+      <img id="lightbox-img" src="" alt="Preview">
+      <div id="lightbox-label"></div>
+    </div>
+  </div>
 
   <h1>🎮 Host Console</h1>
 
@@ -230,47 +264,79 @@
       let html = `<table class="stats-table">
         <thead>
           <tr>
-            <th>Question</th>
-            <th>Team A (${GROUPS.length} groups)</th>
-            <th>Team B (${GROUPS.length} groups)</th>
+            <th style="width:90px">Question</th>
+            <th></th>
+            ${TEAMS.map(t => `<th>Team ${t}</th>`).join('')}
           </tr>
         </thead>
         <tbody>`;
 
       stats.forEach(q => {
         const isActive = q.question_id === activeQid;
-        html += `<tr class="${isActive ? "active-row" : ""}">
-          <td>
-            <strong>${q.question_id}</strong><br>
-            <img src="${q.image_url}" style="width:60px;height:60px;object-fit:cover;border-radius:.35rem;margin-top:.3rem">
-          </td>`;
+        const rowClass = isActive ? "active-row" : "";
 
-        TEAMS.forEach(team => {
-          const td = q.teams[team];
-          html += `<td>
-            <div style="font-size:.8rem;color:#64748b;margin-bottom:.35rem">
-              Submitted: <strong>${td.count}/${GROUPS.length}</strong>
-              ${td.avg !== null ? ` · Avg: <strong>${td.avg}%</strong>` : ""}
-            </div>
-            <div class="group-score-grid">`;
-          GROUPS.forEach(g => {
+        GROUPS.forEach((g, gi) => {
+          html += `<tr class="${rowClass}">`;
+
+          // Question cell — only on first group row
+          if (gi === 0) {
+            html += `<td rowspan="${GROUPS.length}" style="vertical-align:top;text-align:center;padding-top:.6rem">
+              <strong>${q.question_id}</strong><br>
+              <img src="${q.image_url}" style="width:60px;height:60px;object-fit:cover;border-radius:.35rem;margin-top:.3rem;cursor:zoom-in"
+                onclick="openLightbox('${q.image_url}', '${q.question_id} — Reference')">
+            </td>`;
+          }
+
+          // Group label
+          html += `<td style="font-weight:700;color:#475569;white-space:nowrap;padding-right:.25rem">G${g}</td>`;
+
+          // One column per team
+          TEAMS.forEach(team => {
+            const td = q.teams[team];
             const gs = td.groups[String(g)];
+            const thumbs = (gs.draft_urls || []).map((url, i) => {
+              const isSubmitted = gs.submitted && url === gs.image_url;
+              const border = isSubmitted ? "border-color:#059669;border-width:3px" : "";
+              const label = isSubmitted
+                ? `Team ${team} · G${g} · Draft ${i+1} (submitted)`
+                : `Team ${team} · G${g} · Draft ${i+1}`;
+              return `<img src="${url}" class="draft-thumb" style="${border}" title="${label}"
+                onclick="openLightbox('${url}', '${label}')">`;
+            }).join('');
+
             if (gs.submitted) {
-              html += `
-                <span class="gscore submitted"
-                  title="${gs.prompt || ''}"
-                  onclick="showPics('${team}', ${g})"
-                  style="cursor:pointer">
-                  G${g}: ${gs.score}%
-                </span>`;
+              html += `<td>
+                <div class="gscore-block">
+                  <span class="gscore submitted" title="${gs.prompt || ''}" onclick="showPics('${team}', ${g})" style="cursor:pointer">
+                    ${gs.score}%
+                  </span>
+                  ${thumbs ? `<div class="draft-thumbs">${thumbs}</div>` : ''}
+                </div>
+              </td>`;
             } else {
-              html += `<span class="gscore">G${g}: --</span>`;
+              html += `<td>
+                <div class="gscore-block">
+                  <span class="gscore">--</span>
+                  ${thumbs ? `<div class="draft-thumbs">${thumbs}</div>` : ''}
+                </div>
+              </td>`;
             }
           });
-          html += `</div></td>`;
+
+          html += `</tr>`;
         });
 
-        html += `</tr>`;
+        // Summary row (avg per team)
+        html += `<tr class="${rowClass}" style="border-top:2px solid #e2e8f0">
+          <td></td><td style="font-size:.78rem;color:#94a3b8">avg</td>
+          ${TEAMS.map(team => {
+            const td = q.teams[team];
+            return `<td style="font-size:.8rem;color:#64748b">
+              ${td.count}/${GROUPS.length} submitted${td.avg !== null ? ` · <strong>${td.avg}%</strong>` : ''}
+            </td>`;
+          }).join('')}
+        </tr>
+        <tr><td colspan="${2 + TEAMS.length}" style="padding:0;height:8px"></td></tr>`;
       });
 
       html += `</tbody></table>`;
@@ -296,6 +362,21 @@
         loadStats();
       }
     }
+
+    // ── Lightbox ───────────────────────────────────────────────────────────────
+
+    function openLightbox(url, label) {
+      document.getElementById("lightbox-img").src = url;
+      document.getElementById("lightbox-label").textContent = label || "";
+      document.getElementById("lightbox").classList.add("open");
+    }
+
+    function closeLightbox(e) {
+      if (e && e.target !== document.getElementById("lightbox") && e.target !== document.getElementById("lightbox-close")) return;
+      document.getElementById("lightbox").classList.remove("open");
+    }
+
+    document.addEventListener("keydown", e => { if (e.key === "Escape") document.getElementById("lightbox").classList.remove("open"); });
 
     // ── Init ──────────────────────────────────────────────────────────────────
 

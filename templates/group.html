@@ -5,6 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Team {{ team }} · Group {{ group_number }}</title>
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .gen-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
+    .gen-header h2 { margin-bottom: 0; }
+    .version-btns { display: flex; gap: .4rem; }
+    .vbtn {
+      width: 52px; height: 36px;
+      border-radius: .4rem;
+      border: 2px solid #cbd5e1;
+      background: #e2e8f0;
+      color: #94a3b8;
+      font-weight: 700; font-size: .9rem;
+      cursor: not-allowed;
+      transition: background .2s, border-color .2s, color .2s;
+    }
+    .vbtn.ready { background: #16a34a; border-color: #15803d; color: #fff; cursor: pointer; }
+    .vbtn.ready:hover { background: #15803d; }
+    .vbtn.selected { outline: 3px solid #4f46e5; outline-offset: 2px; }
+  </style>
 </head>
 <body class="group-page">
 
@@ -27,7 +45,14 @@
 
     <!-- Work Area -->
     <section class="panel work-panel">
-      <h2>Your Generated Image</h2>
+      <div class="gen-header">
+        <h2>Your Generated Image</h2>
+        <div class="version-btns">
+          <button class="vbtn" id="vbtn-1" onclick="selectVersion(1)">1</button>
+          <button class="vbtn" id="vbtn-2" onclick="selectVersion(2)">2</button>
+          <button class="vbtn" id="vbtn-3" onclick="selectVersion(3)">3</button>
+        </div>
+      </div>
       <div class="img-frame">
         <img id="gen-img" alt="Generated image">
         <div class="placeholder" id="gen-ph">Click <strong>Generate</strong> to see your image here</div>
@@ -63,7 +88,8 @@
     const TEAM = "{{ team }}";
     const GROUP = {{ group_number }};
     const TOKEN = "{{ token }}";
-    let hasGeneratedImage = false;
+    let drafts = [];        // [{version, image_url}, ...]
+    let selectedVersion = null;
 
     // ── UI state helpers ───────────────────────────────────────────────────────
 
@@ -82,7 +108,7 @@
     }
 
     function enableDrafting() {
-      document.getElementById("generate-btn").disabled = false;
+      document.getElementById("generate-btn").disabled = drafts.length >= 3;
       document.getElementById("submit-btn").disabled = false;
       document.getElementById("prompt-input").disabled = false;
       document.getElementById("upload-btn").style.pointerEvents = "auto";
@@ -102,7 +128,6 @@
     }
 
     function showGenImage(url) {
-      hasGeneratedImage = true;
       const img = document.getElementById("gen-img");
       img.src = url + "?t=" + Date.now();
       img.style.display = "block";
@@ -110,9 +135,37 @@
       document.getElementById("gen-ph").style.display = "none";
     }
 
+    function updateVersionButtons() {
+      for (let v = 1; v <= 3; v++) {
+        const btn = document.getElementById(`vbtn-${v}`);
+        const hasDraft = drafts.some(d => d.version === v);
+        btn.classList.toggle("ready", hasDraft);
+        btn.classList.toggle("selected", v === selectedVersion);
+        btn.disabled = !hasDraft;
+      }
+    }
+
+    function selectVersion(v) {
+      const draft = drafts.find(d => d.version === v);
+      if (!draft) return;
+      selectedVersion = v;
+      showGenImage(draft.image_url);
+      updateVersionButtons();
+    }
+
+    function onDraftAdded(version, imageUrl) {
+      if (!drafts.some(d => d.version === version)) {
+        drafts.push({ version, image_url: imageUrl });
+      }
+      selectedVersion = version;
+      showGenImage(imageUrl);
+      updateVersionButtons();
+    }
+
     function showSubmitted(score, imgUrl, prompt) {
       if (prompt) document.getElementById("prompt-input").value = prompt;
       if (imgUrl) showGenImage(imgUrl);
+      updateVersionButtons();
       document.getElementById("generate-btn").disabled = true;
       document.getElementById("submit-btn").disabled = true;
       document.getElementById("prompt-input").disabled = true;
@@ -124,12 +177,14 @@
     }
 
     function resetForNewQuestion(qid) {
-      hasGeneratedImage = false;
+      drafts = [];
+      selectedVersion = null;
       document.getElementById("prompt-input").value = "";
       document.getElementById("gen-img").style.display = "none";
       document.getElementById("gen-ph").style.display = "flex";
       document.getElementById("gen-spinner").style.display = "none";
       document.getElementById("submit-banner").style.display = "none";
+      updateVersionButtons();
       showRef(qid);
       enableDrafting();
     }
@@ -150,9 +205,16 @@
 
       showRef(gs.current_question_id);
 
+      drafts = data.drafts || [];
+      if (drafts.length > 0) {
+        selectedVersion = drafts[drafts.length - 1].version;
+      }
+      updateVersionButtons();
+
       if (data.submission) {
         showSubmitted(data.submission.score, data.submission.image_url, data.submission.prompt);
       } else {
+        if (selectedVersion) showGenImage(drafts.find(d => d.version === selectedVersion).image_url);
         enableDrafting();
       }
     }
@@ -171,7 +233,7 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Generation failed");
-        showGenImage(data.image_url);
+        onDraftAdded(data.version, data.image_url);
         enableDrafting();
       } catch (err) {
         alert("Error: " + err.message);
@@ -195,7 +257,7 @@
         const res = await fetch("/api/upload-image", { method: "POST", body: form });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Upload failed");
-        showGenImage(data.image_url);
+        onDraftAdded(data.version, data.image_url);
         enableDrafting();
       } catch (err) {
         alert("Error: " + err.message);
@@ -206,7 +268,7 @@
     }
 
     async function doSubmit() {
-      if (!hasGeneratedImage) {
+      if (!selectedVersion) {
         alert("Please generate an image first.");
         return;
       }
@@ -218,7 +280,7 @@
         const res = await fetch("/api/submit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ team: TEAM, group_number: GROUP, prompt, token: TOKEN }),
+          body: JSON.stringify({ team: TEAM, group_number: GROUP, prompt, token: TOKEN, version: selectedVersion }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Submit failed");
