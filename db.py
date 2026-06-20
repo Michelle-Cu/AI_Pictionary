@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-DB_PATH = Path("game.db")
+DB_PATH = Path("data/game.db")
 
 
 def _connect() -> sqlite3.Connection:
