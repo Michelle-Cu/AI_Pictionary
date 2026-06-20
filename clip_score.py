@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+import math
 from PIL import Image
 from transformers import (
     CLIPProcessor, 
@@ -61,4 +62,15 @@ def calculate_score(ref_path: str, submission_path: str, weight_clip: float = 0.
     # Clamp the result to ensure floating point inaccuracies don't push it slightly above 1.0
     blended_sim = max(0.0, min(1.0, blended_sim))
 
-    return round(blended_sim * 100)
+    # Sigmoid function to change steepness for values in the middle
+    # 'k' controls the steepness. A value of 10-15 preferable
+    k = 12.0 
+    midpoint = 0.5
+    
+    # Apply the math formula for an S-Curve
+    curve_sim = 1 / (1 + math.exp(-k * (blended_sim - midpoint)))
+    
+    # The math naturally outputs between ~0.0 and ~1.0, but we clamp it just in case
+    curve_sim = max(0.0, min(1.0, curve_sim))
+
+    return round(curve_sim * 100)
