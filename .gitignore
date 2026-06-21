@@ -4,4 +4,7 @@ data/
 __pycache__/
 *.pyc
 .venv/
-.claudeignore
+.vscode
+prototype
+.DS_Store
+.dockerignore
