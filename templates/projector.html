@@ -5,11 +5,252 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Projector — AI Pictionary</title>
   <link rel="stylesheet" href="/static/style.css">
+
+  <!-- ── Code Code Nut redesign (design only — no logic changed) ─────────────── -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    /* ===== Code Code Nut camp theme ======================================== */
+    body.projector-page {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Nunito', sans-serif;
+      color: #473c37;
+      background-color: #a9dcec;
+      background-image: radial-gradient(rgba(255, 255, 255, 0.55) 2.5px, transparent 2.6px);
+      background-size: 38px 38px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ---- Mode A: Scoreboard ---------------------------------------------- */
+    .projector-scoreboard {
+      position: relative;
+      overflow: hidden;
+      min-height: 100vh;
+      width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(28px, 4.5vh, 60px);
+      padding: clamp(28px, 4vw, 60px);
+    }
+
+    .proj-title {
+      font-family: 'Baloo 2', cursive;
+      font-weight: 800;
+      font-size: clamp(30px, 4.4vw, 58px);
+      letter-spacing: 0.5px;
+      line-height: 1;
+      color: #473c37;
+      background: #fdf8ec;
+      border: 4px solid #473c37;
+      border-radius: 999px;
+      padding: clamp(12px, 1.6vh, 20px) clamp(30px, 4vw, 56px);
+      box-shadow: 7px 7px 0 #473c37;
+      text-align: center;
+    }
+
+    .teams-container {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: clamp(28px, 4vw, 56px);
+      width: 100%;
+      max-width: 1180px;
+    }
+
+    .team-card {
+      position: relative;
+      overflow: hidden;
+      background: #fdfaf2;
+      border: 4px solid #473c37;
+      border-radius: 36px;
+      box-shadow: 9px 9px 0 #473c37;
+      padding: clamp(28px, 3vw, 46px);
+      display: flex;
+      flex-direction: column;
+      gap: clamp(20px, 2.6vh, 34px);
+    }
+    /* top accent bar — orange for Team A, teal for Team B */
+    .team-card::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 14px;
+      border-bottom: 4px solid #473c37;
+    }
+    .teams-container .team-card:nth-child(1)::after { background: #ec9a55; }
+    .teams-container .team-card:nth-child(2)::after { background: #84c4b8; }
+
+    .team-card h2 {
+      margin: 0;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: clamp(12px, 1.2vw, 18px);
+      font-family: 'Baloo 2', cursive;
+      font-weight: 800;
+      font-size: clamp(28px, 3.6vw, 50px);
+      line-height: 1;
+      color: #473c37;
+    }
+    /* letter badge */
+    .team-card h2::before {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: clamp(38px, 3.4vw, 52px);
+      height: clamp(38px, 3.4vw, 52px);
+      border: 4px solid #473c37;
+      border-radius: 13px;
+      color: #fff;
+      font-size: clamp(20px, 2.1vw, 30px);
+      box-shadow: 3px 3px 0 #473c37;
+    }
+    .teams-container .team-card:nth-child(1) h2::before { content: 'A'; background: #ec9a55; }
+    .teams-container .team-card:nth-child(2) h2::before { content: 'B'; background: #84c4b8; }
+
+    .dots-row {
+      display: flex;
+      gap: clamp(12px, 1.4vw, 20px);
+    }
+    .dot {
+      box-sizing: border-box;
+      width: clamp(40px, 4.2vw, 64px);
+      height: clamp(40px, 4.2vw, 64px);
+      border-radius: 50%;
+      border: 4px solid #473c37;
+      background: #fdf8ec;
+      box-shadow: 3px 3px 0 rgba(71, 60, 55, 0.25);
+      transition: background 0.2s ease;
+    }
+    .teams-container .team-card:nth-child(1) .dot.filled { background: #ec9a55; }
+    .teams-container .team-card:nth-child(2) .dot.filled { background: #84c4b8; }
+
+    .team-avg {
+      font-family: 'Baloo 2', cursive;
+      font-weight: 800;
+      font-size: clamp(44px, 5.6vw, 86px);
+      line-height: 1;
+      color: #473c37;
+    }
+    .teams-container .team-card:nth-child(1) .team-avg.revealed { color: #ec9a55; }
+    .teams-container .team-card:nth-child(2) .team-avg.revealed { color: #84c4b8; }
+
+    /* ---- Decorations (purely decorative, not referenced by JS) ------------ */
+    .proj-decor {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .proj-decor .palm   { position: absolute; right: max(30px, 3.5%); bottom: -8px; width: clamp(140px, 15vw, 224px); height: auto; overflow: visible; }
+    .proj-decor .coco-tl { position: absolute; top: 7%;  left: 5.5%; width: clamp(46px, 5vw, 78px); height: auto; }
+    .proj-decor .coco-tr { position: absolute; top: 8%;  right: 6.5%; width: clamp(40px, 4.4vw, 64px); height: auto; }
+    .proj-decor .coco-bl { position: absolute; bottom: 9%; left: 7%; width: clamp(48px, 5.2vw, 82px); height: auto; }
+    .proj-decor .coco-bl2 { position: absolute; bottom: 5%; left: 15%; width: clamp(36px, 3.8vw, 58px); height: auto; }
+
+    /* ---- Mode B: Single submission --------------------------------------- */
+    .projector-single {
+      position: relative;
+      min-height: 100vh;
+      width: 100%;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(20px, 3vh, 40px);
+      padding: clamp(28px, 4vw, 56px);
+    }
+    .single-header {
+      font-family: 'Baloo 2', cursive;
+      font-weight: 800;
+      font-size: clamp(28px, 4vw, 52px);
+      color: #473c37;
+      background: #fdf8ec;
+      border: 4px solid #473c37;
+      border-radius: 999px;
+      padding: clamp(12px, 1.6vh, 18px) clamp(28px, 4vw, 48px);
+      box-shadow: 6px 6px 0 #473c37;
+    }
+    .single-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: clamp(16px, 2.4vh, 30px);
+    }
+    #single-img {
+      max-width: min(72vw, 840px);
+      max-height: 58vh;
+      background: #fff;
+      border: 4px solid #473c37;
+      border-radius: 28px;
+      box-shadow: 9px 9px 0 #473c37;
+      object-fit: contain;
+    }
+    .single-score {
+      font-family: 'Baloo 2', cursive;
+      font-weight: 800;
+      font-size: clamp(32px, 4.5vw, 66px);
+      color: #473c37;
+      background: #fdfaf2;
+      border: 4px solid #473c37;
+      border-radius: 22px;
+      padding: clamp(8px, 1.2vh, 14px) clamp(24px, 3vw, 38px);
+      box-shadow: 5px 5px 0 #473c37;
+    }
+    .single-score span { color: #ec9a55; }
+  </style>
 </head>
 <body class="projector-page">
 
   <!-- Mode A: Scoreboard -->
   <div id="mode-scoreboard" class="projector-scoreboard">
+    <!-- decorative coconut palm + coconuts (aria-hidden; never touched by JS) -->
+    <div class="proj-decor" aria-hidden="true">
+      <svg class="palm" viewBox="0 0 320 400" xmlns="http://www.w3.org/2000/svg">
+        <path d="M168 400 C 128 300, 138 215, 172 140" fill="none" stroke="#473c37" stroke-width="30" stroke-linecap="round"/>
+        <path d="M168 400 C 128 300, 138 215, 172 140" fill="none" stroke="#8a6a4f" stroke-width="16" stroke-linecap="round"/>
+        <g stroke="#473c37" stroke-width="4">
+          <ellipse cx="248" cy="138" rx="84" ry="26" fill="#84c4b8" transform="rotate(-150 172 138)"/>
+          <ellipse cx="248" cy="138" rx="86" ry="26" fill="#9bd0c5" transform="rotate(-115 172 138)"/>
+          <ellipse cx="248" cy="138" rx="90" ry="27" fill="#84c4b8" transform="rotate(-88 172 138)"/>
+          <ellipse cx="248" cy="138" rx="86" ry="26" fill="#9bd0c5" transform="rotate(-58 172 138)"/>
+          <ellipse cx="248" cy="138" rx="82" ry="25" fill="#84c4b8" transform="rotate(-26 172 138)"/>
+        </g>
+        <g stroke="#473c37" stroke-width="4">
+          <circle cx="150" cy="160" r="17" fill="#7a5a42"/>
+          <circle cx="186" cy="158" r="17" fill="#7a5a42"/>
+          <circle cx="168" cy="182" r="16" fill="#6b4d38"/>
+        </g>
+      </svg>
+      <svg class="coco-tl" viewBox="0 0 84 84" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="42" cy="42" r="34" fill="#7a5a42" stroke="#473c37" stroke-width="4"/>
+        <ellipse cx="30" cy="28" rx="10" ry="6.5" fill="rgba(255,255,255,0.32)"/>
+        <circle cx="35" cy="46" r="4.5" fill="#473c37"/><circle cx="49" cy="46" r="4.5" fill="#473c37"/><circle cx="42" cy="57" r="4.5" fill="#473c37"/>
+      </svg>
+      <svg class="coco-tr" viewBox="0 0 84 84" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="42" cy="42" r="34" fill="#7a5a42" stroke="#473c37" stroke-width="4"/>
+        <ellipse cx="30" cy="28" rx="10" ry="6.5" fill="rgba(255,255,255,0.32)"/>
+        <circle cx="35" cy="46" r="4.5" fill="#473c37"/><circle cx="49" cy="46" r="4.5" fill="#473c37"/><circle cx="42" cy="57" r="4.5" fill="#473c37"/>
+      </svg>
+      <svg class="coco-bl" viewBox="0 0 84 84" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="42" cy="42" r="34" fill="#7a5a42" stroke="#473c37" stroke-width="4"/>
+        <ellipse cx="30" cy="28" rx="10" ry="6.5" fill="rgba(255,255,255,0.32)"/>
+        <circle cx="35" cy="46" r="4.5" fill="#473c37"/><circle cx="49" cy="46" r="4.5" fill="#473c37"/><circle cx="42" cy="57" r="4.5" fill="#473c37"/>
+      </svg>
+      <svg class="coco-bl2" viewBox="0 0 84 84" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="42" cy="42" r="34" fill="#6b4d38" stroke="#473c37" stroke-width="4"/>
+        <ellipse cx="30" cy="28" rx="10" ry="6.5" fill="rgba(255,255,255,0.28)"/>
+        <circle cx="35" cy="46" r="4.5" fill="#473c37"/><circle cx="49" cy="46" r="4.5" fill="#473c37"/><circle cx="42" cy="57" r="4.5" fill="#473c37"/>
+      </svg>
+    </div>
+
     <div class="proj-title" id="proj-title">AI 你畫我猜</div>
 
     <div class="teams-container">
