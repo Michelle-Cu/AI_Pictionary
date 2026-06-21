@@ -1,6 +1,6 @@
 # AI 你畫我猜
 
-A prompt-engineering competition game for CS camp. Teams compete to recreate a reference image by writing prompts that Gemini renders into AI-generated images. Submissions are scored automatically using a blended CLIP + DINO visual similarity score.
+Teams compete to recreate a reference image by writing prompts that Gemini renders into AI-generated images. Submissions are scored automatically using a blended CLIP + DINO visual similarity score.
 
 ---
 
