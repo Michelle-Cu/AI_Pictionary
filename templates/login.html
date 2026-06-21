@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — AI 你畫我猜</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .login-box { background: var(--surface, #1e1e2e); padding: 2rem; border-radius: 1rem; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 1rem; }
+    .login-box h1 { margin: 0; font-size: 1.4rem; text-align: center; color: #e2e2f0; }
+    .login-box input[type=password] { width: 100%; padding: .65rem .75rem; border-radius: .5rem; border: 1px solid #444; background: #2a2a3e; color: #e2e2f0; font-size: 1rem; box-sizing: border-box; }
+    .login-box button { padding: .7rem; border-radius: .5rem; border: none; background: #7c6af7; color: #fff; font-size: 1rem; cursor: pointer; }
+    .login-box button:hover { background: #6a59e0; }
+    .error { color: #f87171; text-align: center; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <h1>AI 你畫我猜</h1>
+    <form method="post" action="/login">
+      <div style="display:flex;flex-direction:column;gap:.75rem">
+        <input type="password" name="password" placeholder="Password" autofocus required>
+        {% if error %}<p class="error">Incorrect password.</p>{% endif %}
+        <button type="submit">Enter</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

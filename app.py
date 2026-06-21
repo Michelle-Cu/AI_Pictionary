@@ -9,9 +9,10 @@ from pathlib import Path
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from itsdangerous import BadSignature, URLSafeSerializer
 from PIL import Image
 from pydantic import BaseModel
 
@@ -21,6 +22,18 @@ import db
 load_dotenv()
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+_signer = URLSafeSerializer(os.getenv("SECRET_KEY", "change-me-in-production"), salt="session")
+
+
+def _is_authenticated(request: Request) -> bool:
+    token = request.cookies.get("session")
+    if not token:
+        return False
+    try:
+        return _signer.loads(token) == "authenticated"
+    except BadSignature:
+        return False
 TEAMS = ["A", "B"]
 GROUPS = list(range(1, 5))
 
@@ -132,10 +145,36 @@ async def sse_endpoint(request: Request):
     )
 
 
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request, error: str = ""):
+    return templates.TemplateResponse(request, "login.html", {"error": error})
+
+
+@app.post("/login")
+async def login_submit(request: Request, password: str = Form(...)):
+    if password == APP_PASSWORD:
+        token = _signer.dumps("authenticated")
+        response = RedirectResponse("/host", status_code=303)
+        response.set_cookie("session", token, httponly=True, samesite="lax")
+        return response
+    return RedirectResponse("/login?error=1", status_code=303)
+
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie("session")
+    return response
+
+
 # ── Pages ─────────────────────────────────────────────────────────────────────
 
 @app.get("/team/{team}/group/{group_number}", response_class=HTMLResponse)
 async def group_page(request: Request, team: str, group_number: int, token: str = ""):
+    if not _is_authenticated(request):
+        return RedirectResponse("/login", status_code=303)
     team = team.upper()
     if team not in TEAMS or group_number not in GROUPS:
         raise HTTPException(404, "Unknown team or group")
@@ -150,11 +189,15 @@ async def group_page(request: Request, team: str, group_number: int, token: str 
 
 @app.get("/projector", response_class=HTMLResponse)
 async def projector_page(request: Request):
+    if not _is_authenticated(request):
+        return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse(request, "projector.html", {})
 
 
 @app.get("/host", response_class=HTMLResponse)
 async def host_page(request: Request):
+    if not _is_authenticated(request):
+        return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse(
         request, "host.html",
         {"group_tokens": GROUP_TOKENS, "teams": TEAMS, "groups": GROUPS},
