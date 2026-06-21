@@ -106,6 +106,12 @@ async def lifespan(app: FastAPI):
     clip_score.load_models()
     Path("data/questions").mkdir(parents=True, exist_ok=True)
     Path("data/submissions").mkdir(parents=True, exist_ok=True)
+    for img in sorted(p for ext in ("*.png", "*.jpg", "*.jpeg", "*.webp")
+                      for p in Path("data/questions").glob(ext)):
+        qid = img.stem
+        if not db.get_question(qid):
+            db.add_question(qid, str(img))
+            print(f"Auto-registered question: {qid}")
     yield
 
 
