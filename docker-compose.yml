@@ -6,10 +6,9 @@ services:
     env_file:
       - .env
     volumes:
-      - game_data:/app/data
+      - ./data:/app/data
       - hf_cache:/root/.cache/huggingface
     restart: unless-stopped
 
 volumes:
-  game_data:
   hf_cache:
