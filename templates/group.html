@@ -89,9 +89,9 @@
 
     // ── UI state helpers ───────────────────────────────────────────────────────
 
-    function showRef(qid) {
+    function showRef(qid, imageUrl) {
       const img = document.getElementById("ref-img");
-      img.src = `/images/questions/${qid}.png?t=${Date.now()}`;
+      img.src = `${imageUrl}?t=${Date.now()}`;
       img.style.display = "block";
       document.getElementById("ref-ph").style.display = "none";
       document.getElementById("q-badge").textContent = `Question: ${qid}`;
@@ -166,7 +166,7 @@
       document.getElementById("submit-banner").style.display = "block";
     }
 
-    function resetForNewQuestion(qid) {
+    function resetForNewQuestion(qid, imageUrl) {
       drafts = [];
       selectedVersion = null;
       document.getElementById("prompt-input").value = "";
@@ -175,7 +175,7 @@
       document.getElementById("gen-spinner").style.display = "none";
       document.getElementById("submit-banner").style.display = "none";
       updateVersionButtons();
-      showRef(qid);
+      showRef(qid, imageUrl);
       enableDrafting();
     }
 
@@ -193,7 +193,7 @@
         return;
       }
 
-      showRef(gs.current_question_id);
+      showRef(gs.current_question_id, data.question.image_url);
 
       drafts = data.drafts || [];
       if (drafts.length > 0) {
@@ -287,7 +287,7 @@
       const es = new EventSource("/events");
       es.addEventListener("question_changed", (e) => {
         const data = JSON.parse(e.data);
-        resetForNewQuestion(data.question_id);
+        resetForNewQuestion(data.question_id, data.image_url);
       });
       es.onerror = () => {
         // Reconnect handled automatically by browser EventSource

@@ -220,6 +220,9 @@ async def api_group_state(team: str, group_number: int):
     if gs and gs.get("current_question_id"):
         qid = gs["current_question_id"]
         result["question"] = db.get_question(qid)
+        if result["question"]:
+            result["question"] = dict(result["question"])
+            result["question"]["image_url"] = _path_to_url(result["question"]["image_path"])
         sub = db.get_submission(qid, team, group_number)
         if sub:
             sub = dict(sub)
@@ -391,7 +394,8 @@ async def api_set_question(body: dict):
         projector_show_average=False,
         projector_target=None,
     )
-    await broadcast("question_changed", {"question_id": qid})
+    q = db.get_question(qid)
+    await broadcast("question_changed", {"question_id": qid, "image_url": _path_to_url(q["image_path"]) if q else ""})
     return {"ok": True}
 
 
@@ -452,7 +456,9 @@ async def api_clear_submissions():
     )
     shutil.rmtree("data/submissions", ignore_errors=True)
     Path("data/submissions").mkdir(parents=True, exist_ok=True)
-    await broadcast("question_changed", {"question_id": db.get_game_state().get("current_question_id", "")})
+    current_qid = db.get_game_state().get("current_question_id", "")
+    q = db.get_question(current_qid) if current_qid else None
+    await broadcast("question_changed", {"question_id": current_qid, "image_url": _path_to_url(q["image_path"]) if q else ""})
     return {"ok": True}
 
 
