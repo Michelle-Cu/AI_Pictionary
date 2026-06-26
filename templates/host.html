@@ -294,30 +294,35 @@
           TEAMS.forEach(team => {
             const td = q.teams[team];
             const gs = td.groups[String(g)];
-            const thumbs = (gs.draft_urls || []).map((url, i) => {
-              const isSubmitted = gs.submitted && url === gs.image_url;
+            const draftList = (gs.drafts || []).map((draft, i) => {
+              const isSubmitted = gs.submitted && draft.url === gs.image_url;
               const border = isSubmitted ? "border-color:#059669;border-width:3px" : "";
-              const label = isSubmitted
-                ? `Team ${team} · G${g} · Draft ${i+1} (submitted)`
-                : `Team ${team} · G${g} · Draft ${i+1}`;
-              return `<img src="${url}" class="draft-thumb" style="${border}" title="${label}"
-                onclick="openLightbox('${url}', '${label}')">`;
+              const label = `Team ${team} · G${g} · Draft ${i+1}${isSubmitted ? ' (submitted)' : ''}`;
+              const safeUrl = draft.url.replace(/"/g, '&quot;');
+              const safeLabel = label.replace(/"/g, '&quot;');
+              const safePrompt = (draft.prompt || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+              return `<div style="display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;margin-bottom:.35rem">
+                <img src="${safeUrl}" class="draft-thumb" style="${border}"
+                  data-url="${safeUrl}" data-label="${safeLabel}" data-prompt="${safePrompt}"
+                  onclick="openLightboxData(this)">
+                ${draft.prompt ? `<span style="font-size:.72rem;color:#475569;line-height:1.3;word-break:break-word;max-width:80px">${safePrompt}</span>` : ''}
+              </div>`;
             }).join('');
 
             if (gs.submitted) {
               html += `<td>
                 <div class="gscore-block">
-                  <span class="gscore submitted" title="${gs.prompt || ''}" onclick="showPics('${team}', ${g})" style="cursor:pointer">
+                  <span class="gscore submitted" onclick="showPics('${team}', ${g})" style="cursor:pointer">
                     ${gs.score}%
                   </span>
-                  ${thumbs ? `<div class="draft-thumbs">${thumbs}</div>` : ''}
+                  ${draftList ? `<div class="draft-thumbs" style="flex-direction:column;align-items:flex-start">${draftList}</div>` : ''}
                 </div>
               </td>`;
             } else {
               html += `<td>
                 <div class="gscore-block">
                   <span class="gscore">--</span>
-                  ${thumbs ? `<div class="draft-thumbs">${thumbs}</div>` : ''}
+                  ${draftList ? `<div class="draft-thumbs" style="flex-direction:column;align-items:flex-start">${draftList}</div>` : ''}
                 </div>
               </td>`;
             }
@@ -369,6 +374,12 @@
       document.getElementById("lightbox-img").src = url;
       document.getElementById("lightbox-label").textContent = label || "";
       document.getElementById("lightbox").classList.add("open");
+    }
+
+    function openLightboxData(el) {
+      const label = el.dataset.label || "";
+      const prompt = el.dataset.prompt || "";
+      openLightbox(el.dataset.url, prompt ? `${label} — "${prompt}"` : label);
     }
 
     function closeLightbox(e) {

@@ -164,8 +164,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: clamp(20px, 3vh, 40px);
-      padding: clamp(28px, 4vw, 56px);
+      gap: clamp(10px, 1.5vh, 20px);
+      padding: clamp(16px, 2vw, 32px);
     }
     .single-header {
       font-family: 'Baloo 2', cursive;
@@ -178,25 +178,10 @@
       padding: clamp(12px, 1.6vh, 18px) clamp(28px, 4vw, 48px);
       box-shadow: 6px 6px 0 #473c37;
     }
-    .single-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: clamp(16px, 2.4vh, 30px);
-    }
-    #single-img {
-      max-width: min(72vw, 840px);
-      max-height: 58vh;
-      background: #fff;
-      border: 4px solid #473c37;
-      border-radius: 28px;
-      box-shadow: 9px 9px 0 #473c37;
-      object-fit: contain;
-    }
     .single-score {
       font-family: 'Baloo 2', cursive;
       font-weight: 800;
-      font-size: clamp(32px, 4.5vw, 66px);
+      font-size: clamp(28px, 3.8vw, 56px);
       color: #473c37;
       background: #fdfaf2;
       border: 4px solid #473c37;
@@ -205,6 +190,38 @@
       box-shadow: 5px 5px 0 #473c37;
     }
     .single-score span { color: #ec9a55; }
+    .single-content {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: clamp(20px, 3vw, 48px);
+      width: 100%;
+    }
+    #single-img {
+      width: 62%;
+      flex-shrink: 0;
+      max-height: 72vh;
+      background: #fff;
+      border: 4px solid #473c37;
+      border-radius: 28px;
+      box-shadow: 9px 9px 0 #473c37;
+      object-fit: contain;
+    }
+    .single-prompt {
+      flex: 1;
+      min-width: 180px;
+      font-family: 'Nunito', sans-serif;
+      font-size: clamp(16px, 1.8vw, 26px);
+      font-weight: 700;
+      color: #473c37;
+      background: #fdf8ec;
+      border: 3px solid #473c37;
+      border-radius: 16px;
+      padding: clamp(16px, 2.2vh, 28px) clamp(20px, 2vw, 30px);
+      box-shadow: 4px 4px 0 #473c37;
+      word-break: break-word;
+      box-sizing: border-box;
+    }
   </style>
 </head>
 <body class="projector-page">
@@ -281,9 +298,10 @@
   <!-- Mode B: Single submission -->
   <div id="mode-single" class="projector-single" style="display:none">
     <div class="single-header" id="single-header">Team — Group —</div>
+    <div class="single-score">Score: <span id="single-score-val">—</span></div>
     <div class="single-content">
       <img id="single-img" src="" alt="Submission">
-      <div class="single-score">Score: <span id="single-score-val">—</span></div>
+      <div class="single-prompt" id="single-prompt" style="display:none"></div>
     </div>
   </div>
 
@@ -322,7 +340,7 @@
       document.getElementById("mode-single").style.display = "none";
     }
 
-    function toSingle(team, group_number, image_url, score) {
+    function toSingle(team, group_number, image_url, score, prompt) {
       document.getElementById("mode-scoreboard").style.display = "none";
       document.getElementById("mode-single").style.display = "flex";
       document.getElementById("single-header").textContent = `Team ${team} — Group ${group_number}`;
@@ -331,6 +349,13 @@
       }
       document.getElementById("single-score-val").textContent =
         score !== null && score !== undefined ? Math.round(score) + "%" : "—";
+      const promptEl = document.getElementById("single-prompt");
+      if (prompt) {
+        promptEl.textContent = prompt;
+        promptEl.style.display = "block";
+      } else {
+        promptEl.style.display = "none";
+      }
     }
 
     // ── Apply full state (from init event) ────────────────────────────────────
@@ -351,7 +376,7 @@
 
       if (state.projector_mode === "single" && state.projector_target) {
         const t = state.projector_target;
-        toSingle(t.team, t.group_number, state.projector_image_url, state.projector_score);
+        toSingle(t.team, t.group_number, state.projector_image_url, state.projector_score, state.projector_prompt);
       } else {
         toScoreboard();
       }
@@ -392,7 +417,7 @@
 
       es.addEventListener("show_pics", (e) => {
         const d = JSON.parse(e.data);
-        toSingle(d.team, d.group_number, d.image_url, d.score);
+        toSingle(d.team, d.group_number, d.image_url, d.score, d.prompt);
       });
 
       es.addEventListener("show_scoreboard", () => {

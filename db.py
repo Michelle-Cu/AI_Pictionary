@@ -33,6 +33,15 @@ def init_db():
                 UNIQUE(question_id, team, group_number)
             );
 
+            CREATE TABLE IF NOT EXISTS drafts (
+                question_id   TEXT    NOT NULL,
+                team          TEXT    NOT NULL,
+                group_number  INTEGER NOT NULL,
+                version       INTEGER NOT NULL,
+                prompt        TEXT    NOT NULL,
+                PRIMARY KEY (question_id, team, group_number, version)
+            );
+
             CREATE TABLE IF NOT EXISTS game_state (
                 id                      INTEGER PRIMARY KEY CHECK(id = 1),
                 current_question_id     TEXT,
@@ -117,3 +126,20 @@ def get_submissions_for_question(qid: str) -> list[dict]:
 def get_all_submissions() -> list[dict]:
     with _connect() as conn:
         return [dict(r) for r in conn.execute("SELECT * FROM submissions")]
+
+
+def save_draft_prompt(qid: str, team: str, group_number: int, version: int, prompt: str):
+    with _connect() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO drafts(question_id, team, group_number, version, prompt) VALUES(?, ?, ?, ?, ?)",
+            (qid, team, group_number, version, prompt),
+        )
+
+
+def get_draft_prompts(qid: str, team: str, group_number: int) -> dict[int, str]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT version, prompt FROM drafts WHERE question_id=? AND team=? AND group_number=?",
+            (qid, team, group_number),
+        ).fetchall()
+    return {r["version"]: r["prompt"] for r in rows}

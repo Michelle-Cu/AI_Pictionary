@@ -74,6 +74,7 @@ def _build_full_state() -> dict:
     averages: dict[str, int] = {}
     projector_image_url = None
     projector_score = None
+    projector_prompt = None
 
     if qid:
         subs = db.get_submissions_for_question(qid)
@@ -92,11 +93,13 @@ def _build_full_state() -> dict:
             if sub:
                 projector_image_url = _path_to_url(sub["image_path"])
                 projector_score = round(sub["score"])
+                projector_prompt = sub["prompt"]
 
     state["submitted"] = submitted
     state["averages"] = averages
     state["projector_image_url"] = projector_image_url
     state["projector_score"] = projector_score
+    state["projector_prompt"] = projector_prompt
     return state
 
 
@@ -228,12 +231,14 @@ async def api_group_state(team: str, group_number: int):
             sub = dict(sub)
             sub["image_url"] = _path_to_url(sub["image_path"])
         result["submission"] = sub
+        draft_prompts = db.get_draft_prompts(qid, team, group_number)
         for v in range(1, 4):
             p = Path(f"data/submissions/{qid}/{team}_{group_number}_draft_v{v}.png")
             if p.exists():
                 result["drafts"].append({
                     "version": v,
                     "image_url": f"/images/submissions/{qid}/{team}_{group_number}_draft_v{v}.png",
+                    "prompt": draft_prompts.get(v, ""),
                 })
     return result
 
@@ -314,6 +319,7 @@ async def api_generate(req: GenerateReq):
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     out.write_bytes(buf.getvalue())
+    db.save_draft_prompt(qid, team, req.group_number, version, req.prompt)
 
     return {
         "image_url": f"/images/submissions/{qid}/{team}_{req.group_number}_draft_v{version}.png",
@@ -437,6 +443,7 @@ async def api_show_pics(body: dict):
             "group_number": gn,
             "image_url": _path_to_url(sub["image_path"]) if sub else None,
             "score": round(sub["score"]) if sub else None,
+            "prompt": sub["prompt"] if sub else None,
         })
     else:
         db.set_game_state(projector_mode="scoreboard", projector_target=None)
@@ -449,6 +456,7 @@ async def api_show_pics(body: dict):
 async def api_clear_submissions():
     with db._connect() as conn:
         conn.execute("DELETE FROM submissions")
+        conn.execute("DELETE FROM drafts")
     db.set_game_state(
         projector_mode="scoreboard",
         projector_show_average=False,
@@ -485,8 +493,12 @@ async def api_host_stats():
             groups: dict[str, dict] = {}
             for g in GROUPS:
                 sub = sub_map.get((q["id"], team, g))
-                draft_urls = [
-                    f"/images/submissions/{q['id']}/{team}_{g}_draft_v{v}.png"
+                draft_prompts = db.get_draft_prompts(q["id"], team, g)
+                drafts = [
+                    {
+                        "url": f"/images/submissions/{q['id']}/{team}_{g}_draft_v{v}.png",
+                        "prompt": draft_prompts.get(v, ""),
+                    }
                     for v in range(1, 4)
                     if Path(f"data/submissions/{q['id']}/{team}_{g}_draft_v{v}.png").exists()
                 ]
@@ -495,7 +507,7 @@ async def api_host_stats():
                     "score": round(sub["score"]) if sub else None,
                     "prompt": sub["prompt"] if sub else None,
                     "image_url": _path_to_url(sub["image_path"]) if sub else None,
-                    "draft_urls": draft_urls,
+                    "drafts": drafts,
                 }
             count = sum(1 for g in GROUPS if sub_map.get((q["id"], team, g)))
             avg = None

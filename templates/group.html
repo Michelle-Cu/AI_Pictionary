@@ -145,9 +145,13 @@
       updateVersionButtons();
     }
 
-    function onDraftAdded(version, imageUrl) {
-      if (!drafts.some(d => d.version === version)) {
-        drafts.push({ version, image_url: imageUrl });
+    function onDraftAdded(version, imageUrl, prompt) {
+      const existing = drafts.find(d => d.version === version);
+      if (existing) {
+        existing.image_url = imageUrl;
+        if (prompt !== undefined) existing.prompt = prompt;
+      } else {
+        drafts.push({ version, image_url: imageUrl, prompt: prompt || "" });
       }
       selectedVersion = version;
       showGenImage(imageUrl);
@@ -195,7 +199,7 @@
 
       showRef(gs.current_question_id, data.question.image_url);
 
-      drafts = data.drafts || [];
+      drafts = (data.drafts || []).map(d => ({ version: d.version, image_url: d.image_url, prompt: d.prompt || "" }));
       if (drafts.length > 0) {
         selectedVersion = drafts[drafts.length - 1].version;
       }
@@ -223,7 +227,7 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Generation failed");
-        onDraftAdded(data.version, data.image_url);
+        onDraftAdded(data.version, data.image_url, prompt);
         enableDrafting();
       } catch (err) {
         alert("Error: " + err.message);
@@ -264,7 +268,8 @@
       }
       if (!confirm("Submit this image? You can only submit once per question.")) return;
 
-      const prompt = document.getElementById("prompt-input").value.trim();
+      const selectedDraft = drafts.find(d => d.version === selectedVersion);
+      const prompt = selectedDraft?.prompt || document.getElementById("prompt-input").value.trim();
       document.getElementById("submit-btn").disabled = true;
       try {
         const res = await fetch("/api/submit", {
