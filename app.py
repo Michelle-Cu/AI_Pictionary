@@ -182,8 +182,6 @@ async def logout():
 
 @app.get("/team/{team}/group/{group_number}", response_class=HTMLResponse)
 async def group_page(request: Request, team: str, group_number: int, token: str = ""):
-    if not _is_authenticated(request):
-        return RedirectResponse("/login", status_code=303)
     team = team.upper()
     if team not in TEAMS or group_number not in GROUPS:
         raise HTTPException(404, "Unknown team or group")
@@ -198,8 +196,6 @@ async def group_page(request: Request, team: str, group_number: int, token: str 
 
 @app.get("/projector", response_class=HTMLResponse)
 async def projector_page(request: Request):
-    if not _is_authenticated(request):
-        return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse(request, "projector.html", {})
 
 
@@ -601,9 +597,11 @@ async def _gemini_generate(prompt: str) -> bytes:
                 json=payload,
                 timeout=60.0
             )
+            print(f"[DEBUG] OpenRouter status: {response.status_code}")
+            print(f"[DEBUG] OpenRouter body: {response.text[:1000]}")
             response.raise_for_status()
             data = response.json()
-            
+
         # 2. Extract the OpenRouter-specific `images` array
         for choice in data.get("choices", []):
             message = choice.get("message", {})
