@@ -73,4 +73,4 @@ def calculate_score(ref_path: str, submission_path: str, weight_clip: float = 0.
     # The math naturally outputs between ~0.0 and ~1.0, but we clamp it just in case
     curve_sim = max(0.0, min(1.0, curve_sim))
 
-    return round(curve_sim * 100)
+    return round((curve_sim ** 2) * 100)
