@@ -24,6 +24,8 @@ load_dotenv()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 _signer = URLSafeSerializer(os.getenv("SECRET_KEY", "change-me-in-production"), salt="session")
+_group_signer = URLSafeSerializer(os.getenv("SECRET_KEY", "change-me-in-production"), salt="group-session")
+_group_session_gen = 0  # increment to invalidate all group sessions
 
 
 def _is_authenticated(request: Request) -> bool:
@@ -47,6 +49,18 @@ GROUP_TOKENS: dict[tuple[str, int], str] = {
     ("B", 2): "b2-foxtrot",
     ("B", 3): "b3-golf",
     ("B", 4): "b4-hotel",
+}
+
+# username → (team, group_number, password)
+GROUP_CREDENTIALS: dict[str, tuple[str, int, str]] = {
+    "A1": ("A", 1, "alpha"),
+    "A2": ("A", 2, "bravo"),
+    "A3": ("A", 3, "charlie"),
+    "A4": ("A", 4, "delta"),
+    "B1": ("B", 1, "echo"),
+    "B2": ("B", 2, "foxtrot"),
+    "B3": ("B", 3, "golf"),
+    "B4": ("B", 4, "hotel"),
 }
 
 _sse_queues: list[asyncio.Queue] = []
@@ -178,20 +192,61 @@ async def logout():
     return response
 
 
+@app.get("/group-login", response_class=HTMLResponse)
+async def group_login_page(request: Request, error: str = ""):
+    return templates.TemplateResponse(request, "group_login.html", {"error": error})
+
+
+@app.post("/group-login")
+async def group_login_submit(username: str = Form(...), password: str = Form(...)):
+    global _group_session_gen
+    username = username.strip().upper()
+    creds = GROUP_CREDENTIALS.get(username)
+    if creds and creds[2] == password.strip():
+        team, group_number, _ = creds
+        cookie_val = _group_signer.dumps(f"{team}:{group_number}:{_group_session_gen}")
+        response = RedirectResponse(f"/team/{team}/group/{group_number}", status_code=303)
+        response.set_cookie("group_session", cookie_val, httponly=True, samesite="lax")
+        return response
+    return RedirectResponse("/group-login?error=1", status_code=303)
+
+
+@app.get("/group-logout")
+async def group_logout():
+    response = RedirectResponse("/group-login", status_code=303)
+    response.delete_cookie("group_session")
+    return response
+
+
+@app.post("/api/host/logout-all-groups")
+async def api_logout_all_groups():
+    global _group_session_gen
+    _group_session_gen += 1
+    return {"ok": True}
+
+
 # ── Pages ─────────────────────────────────────────────────────────────────────
 
 @app.get("/team/{team}/group/{group_number}", response_class=HTMLResponse)
-async def group_page(request: Request, team: str, group_number: int, token: str = ""):
+async def group_page(request: Request, team: str, group_number: int):
     team = team.upper()
     if team not in TEAMS or group_number not in GROUPS:
         raise HTTPException(404, "Unknown team or group")
-    expected = GROUP_TOKENS.get((team, group_number), "")
-    if expected and token != expected:
-        raise HTTPException(403, "Invalid token. Check your printed URL slip.")
-    return templates.TemplateResponse(
-        request, "group.html",
-        {"team": team, "group_number": group_number, "token": token},
-    )
+
+    try:
+        cookie_val = request.cookies.get("group_session", "")
+        payload = _group_signer.loads(cookie_val)
+        cookie_team, cookie_group, cookie_gen = payload.split(":")
+        if cookie_team == team and int(cookie_group) == group_number and int(cookie_gen) == _group_session_gen:
+            token = GROUP_TOKENS.get((team, group_number), "")
+            return templates.TemplateResponse(
+                request, "group.html",
+                {"team": team, "group_number": group_number, "token": token},
+            )
+    except Exception:
+        pass
+
+    return RedirectResponse("/group-login", status_code=303)
 
 
 @app.get("/projector", response_class=HTMLResponse)

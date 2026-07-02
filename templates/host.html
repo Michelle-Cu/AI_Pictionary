@@ -88,6 +88,8 @@
         <button class="btn btn-secondary" onclick="backToScoreboard()">↩ Scoreboard</button>
         <a href="/projector" target="_blank" class="btn btn-outline btn-sm">Open Projector ↗</a>
         <button class="btn btn-danger btn-sm" onclick="clearSubmissions()">🗑 Clear Submissions</button>
+        <button class="btn btn-danger btn-sm" onclick="logoutAllGroups()">🔒 Logout All Groups</button>
+        <a href="/logout" class="btn btn-outline btn-sm">Host Logout</a>
       </div>
 
       <!-- Stats grid -->
@@ -354,6 +356,13 @@
       const es = new EventSource("/events");
       es.addEventListener("submission", () => { if (activeQid) loadStats(); });
       es.addEventListener("questions_updated", () => loadQuestions());
+    }
+
+    // ── Logout all groups ──────────────────────────────────────────────────────
+
+    async function logoutAllGroups() {
+      if (!confirm("Log out all groups? They will need to log in again.")) return;
+      await fetch("/api/host/logout-all-groups", { method: "POST" });
     }
 
     // ── Clear submissions ──────────────────────────────────────────────────────
