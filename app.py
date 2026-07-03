@@ -53,14 +53,14 @@ GROUP_TOKENS: dict[tuple[str, int], str] = {
 
 # username → (team, group_number, password)
 GROUP_CREDENTIALS: dict[str, tuple[str, int, str]] = {
-    "A1": ("A", 1, "alpha"),
-    "A2": ("A", 2, "bravo"),
-    "A3": ("A", 3, "charlie"),
-    "A4": ("A", 4, "delta"),
-    "B1": ("B", 1, "echo"),
-    "B2": ("B", 2, "foxtrot"),
-    "B3": ("B", 3, "golf"),
-    "B4": ("B", 4, "hotel"),
+    "A1": ("A", 1, "alpha4356"),
+    "A2": ("A", 2, "bravo7902"),
+    "A3": ("A", 3, "charlie2367"),
+    "A4": ("A", 4, "delta9045"),
+    "B1": ("B", 1, "echo3049"),
+    "B2": ("B", 2, "foxtrot1245"),
+    "B3": ("B", 3, "golf8370"),
+    "B4": ("B", 4, "hotel1496"),
 }
 
 _sse_queues: list[asyncio.Queue] = []
