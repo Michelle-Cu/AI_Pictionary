@@ -8,7 +8,7 @@ from pathlib import Path
 
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -76,8 +76,8 @@ def _path_to_url(db_path: str) -> str:
     """Convert a data/... path stored in DB to a /images/... URL."""
     p = db_path.replace("\\", "/")
     if p.startswith("data/"):
-        return "/images/" + p[5:]
-    return "/images/" + p
+        return BASE_PATH + "/images/" + p[5:]
+    return BASE_PATH + "/images/" + p
 
 
 def _build_full_state() -> dict:
@@ -132,15 +132,20 @@ async def lifespan(app: FastAPI):
     yield
 
 
+BASE_PATH = "/AI-Pictionary"
+
 app = FastAPI(lifespan=lifespan)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/images", StaticFiles(directory="data"), name="images")
+app.mount(f"{BASE_PATH}/static", StaticFiles(directory="static"), name="static")
+app.mount(f"{BASE_PATH}/images", StaticFiles(directory="data"), name="images")
 templates = Jinja2Templates(directory="templates")
+templates.env.globals["base_path"] = BASE_PATH
+
+router = APIRouter(prefix=BASE_PATH)
 
 
 # ── SSE ───────────────────────────────────────────────────────────────────────
 
-@app.get("/events")
+@router.get("/events")
 async def sse_endpoint(request: Request):
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -170,34 +175,34 @@ async def sse_endpoint(request: Request):
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
-@app.get("/login", response_class=HTMLResponse)
+@router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: str = ""):
     return templates.TemplateResponse(request, "login.html", {"error": error})
 
 
-@app.post("/login")
+@router.post("/login")
 async def login_submit(request: Request, password: str = Form(...)):
     if password == APP_PASSWORD:
         token = _signer.dumps("authenticated")
-        response = RedirectResponse("/host", status_code=303)
+        response = RedirectResponse(BASE_PATH + "/host", status_code=303)
         response.set_cookie("session", token, httponly=True, samesite="lax")
         return response
-    return RedirectResponse("/login?error=1", status_code=303)
+    return RedirectResponse(BASE_PATH + "/login?error=1", status_code=303)
 
 
-@app.get("/logout")
+@router.get("/logout")
 async def logout():
-    response = RedirectResponse("/login", status_code=303)
+    response = RedirectResponse(BASE_PATH + "/login", status_code=303)
     response.delete_cookie("session")
     return response
 
 
-@app.get("/group-login", response_class=HTMLResponse)
+@router.get("/group-login", response_class=HTMLResponse)
 async def group_login_page(request: Request, error: str = ""):
     return templates.TemplateResponse(request, "group_login.html", {"error": error})
 
 
-@app.post("/group-login")
+@router.post("/group-login")
 async def group_login_submit(username: str = Form(...), password: str = Form(...)):
     global _group_session_gen
     username = username.strip().upper()
@@ -205,20 +210,20 @@ async def group_login_submit(username: str = Form(...), password: str = Form(...
     if creds and creds[2] == password.strip():
         team, group_number, _ = creds
         cookie_val = _group_signer.dumps(f"{team}:{group_number}:{_group_session_gen}")
-        response = RedirectResponse(f"/team/{team}/group/{group_number}", status_code=303)
+        response = RedirectResponse(BASE_PATH + f"/team/{team}/group/{group_number}", status_code=303)
         response.set_cookie("group_session", cookie_val, httponly=True, samesite="lax")
         return response
-    return RedirectResponse("/group-login?error=1", status_code=303)
+    return RedirectResponse(BASE_PATH + "/group-login?error=1", status_code=303)
 
 
-@app.get("/group-logout")
+@router.get("/group-logout")
 async def group_logout():
-    response = RedirectResponse("/group-login", status_code=303)
+    response = RedirectResponse(BASE_PATH + "/group-login", status_code=303)
     response.delete_cookie("group_session")
     return response
 
 
-@app.post("/api/host/logout-all-groups")
+@router.post("/api/host/logout-all-groups")
 async def api_logout_all_groups():
     global _group_session_gen
     _group_session_gen += 1
@@ -227,7 +232,7 @@ async def api_logout_all_groups():
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
 
-@app.get("/team/{team}/group/{group_number}", response_class=HTMLResponse)
+@router.get("/team/{team}/group/{group_number}", response_class=HTMLResponse)
 async def group_page(request: Request, team: str, group_number: int):
     team = team.upper()
     if team not in TEAMS or group_number not in GROUPS:
@@ -246,18 +251,18 @@ async def group_page(request: Request, team: str, group_number: int):
     except Exception:
         pass
 
-    return RedirectResponse("/group-login", status_code=303)
+    return RedirectResponse(BASE_PATH + "/group-login", status_code=303)
 
 
-@app.get("/projector", response_class=HTMLResponse)
+@router.get("/projector", response_class=HTMLResponse)
 async def projector_page(request: Request):
     return templates.TemplateResponse(request, "projector.html", {})
 
 
-@app.get("/host", response_class=HTMLResponse)
+@router.get("/host", response_class=HTMLResponse)
 async def host_page(request: Request):
     if not _is_authenticated(request):
-        return RedirectResponse("/login", status_code=303)
+        return RedirectResponse(BASE_PATH + "/login", status_code=303)
     return templates.TemplateResponse(
         request, "host.html",
         {"group_tokens": GROUP_TOKENS, "teams": TEAMS, "groups": GROUPS},
@@ -266,7 +271,7 @@ async def host_page(request: Request):
 
 # ── Group API ─────────────────────────────────────────────────────────────────
 
-@app.get("/api/group-state/{team}/{group_number}")
+@router.get("/api/group-state/{team}/{group_number}")
 async def api_group_state(team: str, group_number: int):
     team = team.upper()
     gs = db.get_game_state()
@@ -288,7 +293,7 @@ async def api_group_state(team: str, group_number: int):
             if p.exists():
                 result["drafts"].append({
                     "version": v,
-                    "image_url": f"/images/submissions/{qid}/{team}_{group_number}_draft_v{v}.png",
+                    "image_url": BASE_PATH + f"/images/submissions/{qid}/{team}_{group_number}_draft_v{v}.png",
                     "prompt": draft_prompts.get(v, ""),
                 })
     return result
@@ -301,7 +306,7 @@ class GenerateReq(BaseModel):
     token: str = ""
 
 
-@app.post("/api/upload-image")
+@router.post("/api/upload-image")
 async def api_upload_image(
     team: str = Form(...),
     group_number: int = Form(...),
@@ -334,13 +339,13 @@ async def api_upload_image(
     out.write_bytes(buf.getvalue())
 
     return {
-        "image_url": f"/images/submissions/{qid}/{team}_{group_number}_draft_v{version}.png",
+        "image_url": BASE_PATH + f"/images/submissions/{qid}/{team}_{group_number}_draft_v{version}.png",
         "version": version,
         "total_drafts": version,
     }
 
 
-@app.post("/api/generate")
+@router.post("/api/generate")
 async def api_generate(req: GenerateReq):
     team = req.team.upper()
     _check_group(team, req.group_number, req.token)
@@ -373,7 +378,7 @@ async def api_generate(req: GenerateReq):
     db.save_draft_prompt(qid, team, req.group_number, version, req.prompt)
 
     return {
-        "image_url": f"/images/submissions/{qid}/{team}_{req.group_number}_draft_v{version}.png",
+        "image_url": BASE_PATH + f"/images/submissions/{qid}/{team}_{req.group_number}_draft_v{version}.png",
         "version": version,
         "total_drafts": version,
     }
@@ -387,7 +392,7 @@ class SubmitReq(BaseModel):
     version: int = 1
 
 
-@app.post("/api/submit")
+@router.post("/api/submit")
 async def api_submit(req: SubmitReq):
     team = req.team.upper()
     _check_group(team, req.group_number, req.token)
@@ -421,7 +426,7 @@ async def api_submit(req: SubmitReq):
 
 # ── Host API ──────────────────────────────────────────────────────────────────
 
-@app.post("/api/host/upload")
+@router.post("/api/host/upload")
 async def api_upload(question_id: str = Form(...), file: UploadFile = File(...)):
     qid = question_id.strip()
     if not qid:
@@ -440,7 +445,7 @@ async def api_upload(question_id: str = Form(...), file: UploadFile = File(...))
     return {"question_id": qid, "image_path": str(path)}
 
 
-@app.post("/api/host/set-question")
+@router.post("/api/host/set-question")
 async def api_set_question(body: dict):
     qid = body.get("question_id", "").strip()
     if not db.get_question(qid):
@@ -456,13 +461,13 @@ async def api_set_question(body: dict):
     return {"ok": True}
 
 
-@app.post("/api/host/pending-screen")
+@router.post("/api/host/pending-screen")
 async def api_pending_screen():
     await broadcast("pending_screen", {})
     return {"ok": True}
 
 
-@app.post("/api/host/show-average")
+@router.post("/api/host/show-average")
 async def api_show_average(body: dict):
     show = bool(body.get("show", True))
     db.set_game_state(projector_show_average=show)
@@ -481,7 +486,7 @@ async def api_show_average(body: dict):
     return {"ok": True, "averages": averages}
 
 
-@app.post("/api/host/show-pics")
+@router.post("/api/host/show-pics")
 async def api_show_pics(body: dict):
     team = body.get("team", "").upper()
     gn = body.get("group_number")
@@ -509,7 +514,7 @@ async def api_show_pics(body: dict):
     return {"ok": True}
 
 
-@app.post("/api/host/clear-submissions")
+@router.post("/api/host/clear-submissions")
 async def api_clear_submissions():
     with db._connect() as conn:
         conn.execute("DELETE FROM submissions")
@@ -527,17 +532,17 @@ async def api_clear_submissions():
     return {"ok": True}
 
 
-@app.get("/api/questions")
+@router.get("/api/questions")
 async def api_questions():
     return db.list_questions()
 
 
-@app.get("/api/state")
+@router.get("/api/state")
 async def api_state():
     return _build_full_state()
 
 
-@app.get("/api/host/stats")
+@router.get("/api/host/stats")
 async def api_host_stats():
     questions = db.list_questions()
     all_subs = db.get_all_submissions()
@@ -553,7 +558,7 @@ async def api_host_stats():
                 draft_prompts = db.get_draft_prompts(q["id"], team, g)
                 drafts = [
                     {
-                        "url": f"/images/submissions/{q['id']}/{team}_{g}_draft_v{v}.png",
+                        "url": BASE_PATH + f"/images/submissions/{q['id']}/{team}_{g}_draft_v{v}.png",
                         "prompt": draft_prompts.get(v, ""),
                     }
                     for v in range(1, 4)
@@ -695,6 +700,8 @@ async def _gemini_generate(prompt: str) -> bytes:
     except Exception as exc:
         raise HTTPException(500, f"Error generating image: {exc}") from exc
 
+
+app.include_router(router)
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=False)

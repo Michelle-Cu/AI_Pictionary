@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Team {{ team }} · Group {{ group_number }}</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ base_path }}/static/style.css">
   <style>
     .gen-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
     .gen-header h2 { margin-bottom: 0; }
@@ -81,6 +81,7 @@
   </main>
 
   <script>
+    const BASE = "{{ base_path }}";
     const TEAM = "{{ team }}";
     const GROUP = {{ group_number }};
     const TOKEN = "{{ token }}";
@@ -186,7 +187,7 @@
     // ── Load page state ────────────────────────────────────────────────────────
 
     async function loadState() {
-      const res = await fetch(`/api/group-state/${TEAM}/${GROUP}`);
+      const res = await fetch(BASE + `/api/group-state/${TEAM}/${GROUP}`);
       const data = await res.json();
       const gs = data.game_state;
 
@@ -220,7 +221,7 @@
       if (!prompt) { alert("Please enter a prompt first."); return; }
       setGenerating();
       try {
-        const res = await fetch("/api/generate", {
+        const res = await fetch(BASE + "/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ team: TEAM, group_number: GROUP, prompt, token: TOKEN }),
@@ -248,7 +249,7 @@
         form.append("group_number", GROUP);
         form.append("token", TOKEN);
         form.append("file", file);
-        const res = await fetch("/api/upload-image", { method: "POST", body: form });
+        const res = await fetch(BASE + "/api/upload-image", { method: "POST", body: form });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || "Upload failed");
         onDraftAdded(data.version, data.image_url);
@@ -272,7 +273,7 @@
       const prompt = selectedDraft?.prompt || document.getElementById("prompt-input").value.trim();
       document.getElementById("submit-btn").disabled = true;
       try {
-        const res = await fetch("/api/submit", {
+        const res = await fetch(BASE + "/api/submit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ team: TEAM, group_number: GROUP, prompt, token: TOKEN, version: selectedVersion }),
@@ -289,7 +290,7 @@
     // ── SSE ────────────────────────────────────────────────────────────────────
 
     function connectSSE() {
-      const es = new EventSource("/events");
+      const es = new EventSource(BASE + "/events");
       es.addEventListener("pending_screen", () => {
         clearRef();
         document.getElementById("ref-img").style.display = "none";

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login — AI 你畫我猜</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="{{ base_path }}/static/style.css">
   <style>
     body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
     .login-box { background: var(--surface, #1e1e2e); padding: 2rem; border-radius: 1rem; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 1rem; }
@@ -18,7 +18,7 @@
 <body>
   <div class="login-box">
     <h1>AI 你畫我猜</h1>
-    <form method="post" action="/login">
+    <form method="post" action="{{ base_path }}/login">
       <div style="display:flex;flex-direction:column;gap:.75rem">
         <input type="password" name="password" placeholder="Password" autofocus required>
         {% if error %}<p class="error">Incorrect password.</p>{% endif %}
