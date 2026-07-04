@@ -290,6 +290,16 @@
 
     function connectSSE() {
       const es = new EventSource("/events");
+      es.addEventListener("pending_screen", () => {
+        clearRef();
+        document.getElementById("ref-img").style.display = "none";
+        document.getElementById("gen-img").style.display = "none";
+        document.getElementById("gen-ph").style.display = "flex";
+        document.getElementById("btn-row").style.display = "none";
+        document.getElementById("prompt-input").disabled = true;
+        document.getElementById("gen-spinner").style.display = "none";
+      });
+
       es.addEventListener("question_changed", (e) => {
         const data = JSON.parse(e.data);
         resetForNewQuestion(data.question_id, data.image_url);

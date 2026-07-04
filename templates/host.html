@@ -64,6 +64,7 @@
         <div class="question-list" id="question-list">
           <div style="color:#94a3b8;font-size:.85rem">No questions uploaded yet.</div>
         </div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:.75rem;width:100%" onclick="sendPendingScreen()">⏳ Pending Screen</button>
       </div>
 
       <!-- Group URLs -->
@@ -356,6 +357,12 @@
       const es = new EventSource("/events");
       es.addEventListener("submission", () => { if (activeQid) loadStats(); });
       es.addEventListener("questions_updated", () => loadQuestions());
+    }
+
+    // ── Pending screen ────────────────────────────────────────────────────────
+
+    async function sendPendingScreen() {
+      await fetch("/api/host/pending-screen", { method: "POST" });
     }
 
     // ── Logout all groups ──────────────────────────────────────────────────────

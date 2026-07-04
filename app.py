@@ -456,6 +456,12 @@ async def api_set_question(body: dict):
     return {"ok": True}
 
 
+@app.post("/api/host/pending-screen")
+async def api_pending_screen():
+    await broadcast("pending_screen", {})
+    return {"ok": True}
+
+
 @app.post("/api/host/show-average")
 async def api_show_average(body: dict):
     show = bool(body.get("show", True))
