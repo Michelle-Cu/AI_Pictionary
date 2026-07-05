@@ -1,6 +1,8 @@
 .env
 game.db
-data/
+data/submissions/
+data/game.db
+
 __pycache__/
 *.pyc
 .venv/
