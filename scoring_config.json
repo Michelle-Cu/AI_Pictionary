@@ -1,0 +1,19 @@
+{
+  "_comment": "Per-question scoring parameters. Missing keys fall back to 'default'.",
+  "default": {
+    "weight_clip": 0.40,
+    "weight_dino": 0.45,
+    "weight_lpips": 0.15,
+    "sigmoid_k": 12.0,
+    "sigmoid_midpoint": 0.5,
+    "power": 2.0
+  },
+  "Q1": {},
+  "Q2": {},
+  "Q3": {},
+  "Q4": {},
+  "Q5": {},
+  "Q6": {},
+  "Q7": {},
+  "Q8": {}
+}

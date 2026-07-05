@@ -1,7 +1,9 @@
-import torch
-import torch.nn.functional as F
+import json
 import math
 import numpy as np
+import torch
+import torch.nn.functional as F
+from pathlib import Path
 from PIL import Image
 from transformers import (
     CLIPProcessor,
@@ -9,6 +11,17 @@ from transformers import (
     AutoImageProcessor,
     AutoModel,
 )
+
+_CONFIG_PATH = Path(__file__).parent / "scoring_config.json"
+
+def _load_params(question_id: str | None) -> dict:
+    """Return merged params: defaults overridden by per-question values."""
+    with open(_CONFIG_PATH) as f:
+        cfg = json.load(f)
+    params = dict(cfg.get("default", {}))
+    if question_id and question_id in cfg:
+        params.update(cfg[question_id])
+    return params
 
 _clip_model = None
 _clip_processor = None
@@ -56,13 +69,20 @@ def _lpips_sim(img1: Image.Image, img2: Image.Image) -> float:
 
 
 def calculate_score(ref_path: str, submission_path: str,
-                    weight_clip: float = 0.40,
-                    weight_dino: float = 0.45,
-                    weight_lpips: float = 0.15) -> int:
+                    question_id: str | None = None) -> int:
     """
     Returns a blended similarity score (0–100).
-    Weights: DINO 0.45 + CLIP 0.40 + LPIPS 0.15
+    Parameters are loaded from scoring_config.json for the given question_id,
+    falling back to the 'default' entry for any missing keys.
     """
+    p = _load_params(question_id)
+    weight_clip   = p["weight_clip"]
+    weight_dino   = p["weight_dino"]
+    weight_lpips  = p["weight_lpips"]
+    sigmoid_k     = p["sigmoid_k"]
+    sigmoid_mid   = p["sigmoid_midpoint"]
+    power         = p["power"]
+
     img1 = Image.open(ref_path).convert("RGB")
     img2 = Image.open(submission_path).convert("RGB")
 
@@ -89,9 +109,7 @@ def calculate_score(ref_path: str, submission_path: str,
     blended_sim = (weight_clip * clip_sim) + (weight_dino * dino_sim) + (weight_lpips * lpips_sim)
     blended_sim = max(0.0, min(1.0, blended_sim))
 
-    # S-curve to spread mid-range scores; k=12 gives a moderate steepness
-    k = 12.0
-    curve_sim = 1 / (1 + math.exp(-k * (blended_sim - 0.5)))
+    curve_sim = 1 / (1 + math.exp(-sigmoid_k * (blended_sim - sigmoid_mid)))
     curve_sim = max(0.0, min(1.0, curve_sim))
 
-    return round((curve_sim ** 2) * 100)
+    return round((curve_sim ** power) * 100)

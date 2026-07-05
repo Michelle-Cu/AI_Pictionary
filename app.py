@@ -413,7 +413,7 @@ async def api_submit(req: SubmitReq):
     if not question:
         raise HTTPException(400, "Active question not found in database.")
 
-    score = clip_score.calculate_score(question["image_path"], str(draft))
+    score = clip_score.calculate_score(question["image_path"], str(draft), question_id=qid)
     db.save_submission(qid, team, req.group_number, req.prompt, str(draft), score)
 
     await broadcast("submission", {
