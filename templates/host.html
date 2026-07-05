@@ -156,6 +156,7 @@
         div.innerHTML = `
           <span>${q.id}</span>
           <button class="btn btn-primary btn-sm" onclick="setQuestion('${q.id}')">Activate</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteQuestion('${q.id}')">✕</button>
         `;
         list.appendChild(div);
       });
@@ -358,6 +359,19 @@
       const es = new EventSource(BASE + "/events");
       es.addEventListener("submission", () => { if (activeQid) loadStats(); });
       es.addEventListener("questions_updated", () => loadQuestions());
+    }
+
+    // ── Delete question ────────────────────────────────────────────────────────
+
+    async function deleteQuestion(qid) {
+      if (!confirm(`Remove question ${qid}? This cannot be undone.`)) return;
+      const res = await fetch(BASE + `/api/host/delete-question/${qid}`, { method: "DELETE" });
+      if (res.ok) {
+        loadQuestions();
+      } else {
+        const d = await res.json();
+        alert("Failed: " + (d.detail || "unknown error"));
+      }
     }
 
     // ── Pending screen ────────────────────────────────────────────────────────

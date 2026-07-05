@@ -85,7 +85,9 @@ def add_question(qid: str, image_path: str):
 
 def list_questions() -> list[dict]:
     with _connect() as conn:
-        return [dict(r) for r in conn.execute("SELECT * FROM questions ORDER BY id")]
+        rows = [dict(r) for r in conn.execute("SELECT * FROM questions")]
+        rows.sort(key=lambda r: int("".join(filter(str.isdigit, r["id"])) or 0))
+        return rows
 
 
 def get_question(qid: str) -> Optional[dict]:

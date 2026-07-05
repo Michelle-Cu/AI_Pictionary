@@ -514,6 +514,24 @@ async def api_show_pics(body: dict):
     return {"ok": True}
 
 
+@router.delete("/api/host/delete-question/{qid}")
+async def api_delete_question(qid: str):
+    question = db.get_question(qid)
+    if not question:
+        raise HTTPException(404, f"Question {qid} not found.")
+    # Remove from DB
+    with db._connect() as conn:
+        conn.execute("DELETE FROM questions WHERE id = ?", (qid,))
+        conn.execute("DELETE FROM submissions WHERE question_id = ?", (qid,))
+        conn.execute("DELETE FROM drafts WHERE question_id = ?", (qid,))
+    # Remove image file
+    img_path = Path(question["image_path"])
+    if img_path.exists():
+        img_path.unlink()
+    await broadcast("questions_updated", {})
+    return {"ok": True}
+
+
 @router.post("/api/host/clear-submissions")
 async def api_clear_submissions():
     with db._connect() as conn:

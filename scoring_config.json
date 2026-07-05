@@ -11,9 +11,73 @@
   "Q1": {},
   "Q2": {},
   "Q3": {},
-  "Q4": {},
-  "Q5": {},
+  "Q4": {
+    "weight_clip": 0.15,
+    "weight_dino": 0.55,
+    "weight_lpips": 0.30
+  },
+  "Q5": {
+    "weight_clip": 0.70,
+    "weight_dino": 0.30,
+    "weight_lpips": 0.00
+  },
   "Q6": {},
-  "Q7": {},
-  "Q8": {}
+  "Q7": {
+    "weight_clip": 0.15,
+    "weight_dino": 0.45,
+    "weight_lpips": 0.40
+  },
+  "Q8": {
+    "weight_clip": 0.60,
+    "weight_dino": 0.30,
+    "weight_lpips": 0.10
+  },
+  "Q9": {
+    "weight_clip": 0.10,
+    "weight_dino": 0.40,
+    "weight_lpips": 0.50
+  },
+  "Q10": {
+    "weight_clip": 0.15,
+    "weight_dino": 0.45,
+    "weight_lpips": 0.40
+  },
+  "Q11": {},
+  "Q12": {
+    "weight_clip": 0.2,
+    "weight_dino": 0.5,
+    "weight_lpips": 0.3
+  },
+  "Q13": {
+    "weight_clip": 0.2,
+    "weight_dino": 0.5,
+    "weight_lpips": 0.3
+  },
+  "Q14": {
+    "weight_clip": 0.15,
+    "weight_dino": 0.45,
+    "weight_lpips": 0.4
+  },
+  "Q15": {
+    "weight_clip": 0.15,
+    "weight_dino": 0.45,
+    "weight_lpips": 0.40
+  },
+  "Q16": {
+    "weight_clip": 0.25,
+    "weight_dino": 0.50,
+    "weight_lpips": 0.25,
+    "sigmoid_k": 7.0,
+    "sigmoid_midpoint": 0.2
+  },
+  "Q17": {
+    "weight_clip": 0.30,
+    "weight_dino": 0.15,
+    "weight_lpips": 0.55
+  },
+  "Q18": {
+    "weight_clip": 0.20,
+    "weight_dino": 0.55,
+    "weight_lpips": 0.25
+  }
 }
