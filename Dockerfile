@@ -19,9 +19,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --root-user-action=ignore \
     $(grep -v -E '^torch' requirements.txt | tr '\n' ' ')
 
-COPY app.py clip_score.py db.py ./
+COPY app.py clip_score.py db.py scoring_config.json ./
 COPY static/ static/
 COPY templates/ templates/
+COPY utils/ utils/
 
 EXPOSE 8000
 
