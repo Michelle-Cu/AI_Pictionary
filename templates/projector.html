@@ -154,6 +154,33 @@
     .proj-decor .coco-bl { position: absolute; bottom: 9%; left: 7%; width: clamp(48px, 5.2vw, 82px); height: auto; }
     .proj-decor .coco-bl2 { position: absolute; bottom: 5%; left: 15%; width: clamp(36px, 3.8vw, 58px); height: auto; }
 
+    /* ---- Weights badge --------------------------------------------------- */
+    .weights-badge {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      background: #fdf8ec;
+      border: 3px solid #473c37;
+      border-radius: 999px;
+      padding: 8px 20px;
+      box-shadow: 4px 4px 0 #473c37;
+      font-family: 'Baloo 2', cursive;
+      font-weight: 700;
+      font-size: clamp(22px, 2.8vw, 42px);
+      color: #473c37;
+      flex-shrink: 0;
+    }
+    .w-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .w-dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #473c37; flex-shrink: 0; }
+    .w-dot.clip  { background: #7c6af7; }
+    .w-dot.dino  { background: #ec9a55; }
+    .w-dot.lpips { background: #84c4b8; }
+    .w-sep { color: #cbd5e1; }
+
     /* ---- Mode B: Single submission --------------------------------------- */
     .projector-single {
       position: relative;
@@ -277,6 +304,14 @@
 
     <div class="proj-title" id="proj-title">AI 你畫我猜</div>
 
+    <div class="weights-badge" id="weights-badge" style="display:none">
+      <span class="w-chip"><span class="w-dot clip"></span><span id="w-clip">40</span>% CLIP</span>
+      <span class="w-sep">·</span>
+      <span class="w-chip"><span class="w-dot dino"></span><span id="w-dino">45</span>% DINO</span>
+      <span class="w-sep">·</span>
+      <span class="w-chip"><span class="w-dot lpips"></span><span id="w-lpips">15</span>% LPIPS</span>
+    </div>
+
     <div class="teams-container">
       <div class="team-card">
         <h2>Team A</h2>
@@ -343,6 +378,14 @@
       });
     }
 
+    function updateWeights(w) {
+      if (!w) return;
+      document.getElementById("w-clip").textContent  = w.clip;
+      document.getElementById("w-dino").textContent  = w.dino;
+      document.getElementById("w-lpips").textContent = w.lpips;
+      document.getElementById("weights-badge").style.display = "flex";
+    }
+
     function toScoreboard() {
       document.getElementById("mode-scoreboard").style.display = "flex";
       document.getElementById("mode-single").style.display = "none";
@@ -381,6 +424,7 @@
 
       renderDots();
       renderAverages();
+      updateWeights(state.weights);
 
       if (state.projector_mode === "single" && state.projector_target) {
         const t = state.projector_target;
@@ -413,6 +457,7 @@
         document.getElementById("proj-title").textContent = "Question: " + d.question_id;
         renderDots();
         renderAverages();
+        updateWeights(d.weights);
         toScoreboard();
       });
 

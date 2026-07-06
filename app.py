@@ -80,6 +80,24 @@ def _path_to_url(db_path: str) -> str:
     return BASE_PATH + "/images/" + p
 
 
+def _get_weights(qid: str | None) -> dict:
+    """Return the CLIP/DINO/LPIPS weights for a question from scoring_config.json."""
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        cfg = _json.loads((_Path(__file__).parent / "scoring_config.json").read_text())
+        params = dict(cfg.get("default", {}))
+        if qid and qid in cfg:
+            params.update(cfg[qid])
+        return {
+            "clip":  round(params.get("weight_clip",  0.40) * 100),
+            "dino":  round(params.get("weight_dino",  0.45) * 100),
+            "lpips": round(params.get("weight_lpips", 0.15) * 100),
+        }
+    except Exception:
+        return {"clip": 40, "dino": 45, "lpips": 15}
+
+
 def _build_full_state() -> dict:
     """Public state payload for the SSE init event and /api/state."""
     state = db.get_game_state()
@@ -114,6 +132,7 @@ def _build_full_state() -> dict:
     state["projector_image_url"] = projector_image_url
     state["projector_score"] = projector_score
     state["projector_prompt"] = projector_prompt
+    state["weights"] = _get_weights(qid)
     return state
 
 
@@ -457,7 +476,7 @@ async def api_set_question(body: dict):
         projector_target=None,
     )
     q = db.get_question(qid)
-    await broadcast("question_changed", {"question_id": qid, "image_url": _path_to_url(q["image_path"]) if q else ""})
+    await broadcast("question_changed", {"question_id": qid, "image_url": _path_to_url(q["image_path"]) if q else "", "weights": _get_weights(qid)})
     return {"ok": True}
 
 
@@ -546,7 +565,7 @@ async def api_clear_submissions():
     Path("data/submissions").mkdir(parents=True, exist_ok=True)
     current_qid = db.get_game_state().get("current_question_id", "")
     q = db.get_question(current_qid) if current_qid else None
-    await broadcast("question_changed", {"question_id": current_qid, "image_url": _path_to_url(q["image_path"]) if q else ""})
+    await broadcast("question_changed", {"question_id": current_qid, "image_url": _path_to_url(q["image_path"]) if q else "", "weights": _get_weights(current_qid)})
     return {"ok": True}
 
 
