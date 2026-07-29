@@ -6,10 +6,19 @@ Teams compete to recreate a reference image by writing prompts that Gemini rende
 
 ## How It Works
 
-1. The **host** activates a reference image as the current question.
-2. Each **group** sees the reference image, writes a prompt, and generates an image via Gemini. Up to 3 draft attempts per question.
-3. Groups select one draft and click **Submit** to lock it in — scored instantly.
-4. The **projector** shows a live scoreboard with submission progress dots. The host can reveal team averages and project individual submissions.
+1. The host activates a reference image as the current question.
+2. Each group sees the reference image, writes a prompt, and generates an image with Gemini. Up to 3 draft attempts per question.
+3. Groups select one draft and click `Submit`, the score will appear on their webpage and on the host console.
+4. The projector shows a live scoreboard with submission progress dots. The host can reveal team averages and individual submissions (generated image + written prompt).
+
+- Host console
+![Host Console](reference_pictures/ref1_hostConsole.png)
+
+- Projector screen
+![Projector Screen](reference_pictures/ref2_projectorScreen.png)
+
+- Webpage for each group
+![Group Page](reference_pictures/ref3_groupPage.png)
 
 ---
 
@@ -205,6 +214,10 @@ Any key in a question's block overrides the default; missing keys fall back to `
 ├── data/
 │   ├── questions/          # Reference images (committed to repo)
 │   └── submissions/        # Generated images per group (gitignored)
+├── reference_pictures/
+│   ├── ref1_hostConsole.png
+│   ├── ref2_projectorScreen.png
+│   └── ref3_groupPage.png
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env                    # Secrets (gitignored — copy from .env.example)
